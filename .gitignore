@@ -1,0 +1,140 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+nosetests.xml
+coverage.xml
+*,cover
+
+# Translations
+*.mo
+*.pot
+
+# Django / Flask / DB
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
+
+# Scrapy
+.scrapy
+
+# Sphinx
+docs/_build/
+
+# PyBuilder
+target/
+
+# IPython / Jupyter
+profile_default/
+ipython_config.py
+.ipynb_checkpoints/
+*.ipynb
+
+# pyenv
+.python-version
+
+# virtualenv
+venv/
+ENV/
+env/
+.venv/
+venv.bak/
+env.bak/
+
+# Pipenv
+Pipfile.lock
+
+# poetry
+.poetry/
+
+# IDEs
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+dist/
+build/
+yarn-error.log
+
+# Env files
+.env
+.env.*
+*.env
+
+# Secrets and keys
+*.pem
+*.key
+credentials
+secrets.yml
+
+# Docker
+docker-compose.override.yml
+**/docker-compose.override.yml
+docker-compose.*.yml
+Dockerfile.*
+.docker
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+*.pid
+
+# Misc
+*.swp
+*~
+
+# Allow local overrides
+!.gitignore.local
