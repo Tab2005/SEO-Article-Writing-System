@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import settings
+from app.database import startup_db, shutdown_db, get_db_info, check_db_connection
 from app.core.middleware import setup_middleware, HealthCheckResponse
 from app.core.exceptions import (
     SEOSystemException,
@@ -28,7 +29,13 @@ async def lifespan(app: FastAPI):
     print(f"📊 Configuration loaded - Debug: {settings.debug}")
     print(f"🌐 CORS Origins: {settings.cors_origins}")
     
-    # TODO: Initialize database connection pool
+    # Initialize database
+    try:
+        await startup_db()
+    except Exception as e:
+        print(f"❌ Database startup failed: {e}")
+        raise e
+    
     # TODO: Initialize Redis connection
     # TODO: Verify external API credentials
     
@@ -36,7 +43,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     print("📴 SEO Article Writing System shutting down...")
-    # TODO: Close database connections
+    await shutdown_db()
     # TODO: Close Redis connections
 
 def create_app() -> FastAPI:
@@ -79,17 +86,20 @@ def create_app() -> FastAPI:
     @app.get("/health/ready")
     async def readiness_check():
         """Readiness check for Kubernetes/Docker deployments."""
-        # TODO: Check database connectivity
+        # Check database connectivity
+        db_connected = await check_db_connection()
+        db_info = await get_db_info()
+        
         # TODO: Check Redis connectivity
         # TODO: Check external API availability
         
         return {
-            "status": "ready",
+            "status": "ready" if db_connected else "unhealthy",
             "checks": {
-                "database": "connected",  # TODO: Implement real check
-                "redis": "connected",     # TODO: Implement real check
-                "google_api": "available",  # TODO: Implement real check
-                "openai_api": "available"   # TODO: Implement real check
+                "database": db_info,
+                "redis": "pending",     # TODO: Implement real check
+                "google_api": "pending",  # TODO: Implement real check
+                "openai_api": "pending"   # TODO: Implement real check
             }
         }
     
