@@ -8,7 +8,8 @@ This module handles all configuration settings including:
 - Environment-specific configurations
 """
 
-from pydantic import BaseSettings, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 from typing import Optional
 import os
 
@@ -24,26 +25,26 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     
     # 資料庫設定
-    database_url: str = Field(..., env="DATABASE_URL")
+    database_url: str = Field(default="sqlite:///./seo_system.db", env="DATABASE_URL")
     database_echo: bool = Field(default=False, env="DATABASE_ECHO")
     
     # Redis 設定
-    redis_url: str = Field(..., env="REDIS_URL")
+    redis_url: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
     redis_ttl: int = Field(default=604800, env="REDIS_TTL")  # 7 days
     
     # JWT 認證設定
-    secret_key: str = Field(..., env="SECRET_KEY")
+    secret_key: str = Field(default="dev-secret-key-change-in-production", env="SECRET_KEY")
     algorithm: str = Field(default="HS256", env="ALGORITHM")
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
     
     # Google Custom Search API
-    google_api_key: str = Field(..., env="GOOGLE_API_KEY")
-    google_cx_id: str = Field(..., env="GOOGLE_CX_ID")
+    google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
+    google_cx_id: str = Field(default="", env="GOOGLE_CX_ID")
     google_daily_limit: int = Field(default=100, env="GOOGLE_DAILY_LIMIT")
     
     # OpenAI API 設定
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+    openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", env="OPENAI_MODEL")
     openai_max_tokens: int = Field(default=4096, env="OPENAI_MAX_TOKENS")
     
@@ -57,8 +58,8 @@ class Settings(BaseSettings):
     )
     
     # Celery 設定
-    celery_broker_url: str = Field(..., env="CELERY_BROKER_URL")
-    celery_result_backend: str = Field(..., env="CELERY_RESULT_BACKEND")
+    celery_broker_url: str = Field(default="redis://localhost:6379/1", env="CELERY_BROKER_URL")
+    celery_result_backend: str = Field(default="redis://localhost:6379/1", env="CELERY_RESULT_BACKEND")
     
     # 安全性設定
     allowed_hosts: list[str] = Field(default=["localhost", "127.0.0.1"], env="ALLOWED_HOSTS")
