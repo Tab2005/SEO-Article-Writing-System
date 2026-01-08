@@ -108,10 +108,14 @@ def create_app() -> FastAPI:
         """Liveness check for Kubernetes/Docker deployments."""
         return {"status": "alive"}
     
-    # TODO: 在後續任務中添加路由
-    # app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth", tags=["authentication"])
-    # app.include_router(research.router, prefix=f"{settings.api_v1_prefix}/research", tags=["research"])
-    # app.include_router(content.router, prefix=f"{settings.api_v1_prefix}/content", tags=["content"])
+    # Include API routers
+    from app.api.v1 import research, content, auth
+    
+    app.include_router(research.router, prefix=f"{settings.api_v1_prefix}/research", tags=["research"])
+    app.include_router(content.router, prefix=f"{settings.api_v1_prefix}/content", tags=["content"])
+    app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth", tags=["authentication"])
+    
+    # TODO: 在後續任務中添加其他路由
     
     print(f"✅ FastAPI application configured with {len(app.routes)} routes")
     

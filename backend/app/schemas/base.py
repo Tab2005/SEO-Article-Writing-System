@@ -6,8 +6,18 @@ for consistent response formatting and validation.
 """
 
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import datetime
+
+class BaseSchema(BaseModel):
+    """Base schema for all Pydantic models with common configuration."""
+    
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        extra='forbid',
+        from_attributes=True
+    )
 
 class BaseResponse(BaseModel):
     """Base response model for all API responses."""

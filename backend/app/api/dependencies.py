@@ -18,8 +18,9 @@ from redis import Redis
 from structlog import get_logger
 
 from app.config import settings
-# from app.database import get_async_session  # Will be implemented in Task 4
-# from app.core.security import verify_token  # Will be implemented in Task 7
+from app.core.security import verify_access_token, TokenBlacklist
+from app.models.user import User
+from app.schemas.user import AuthenticatedUser
 
 logger = get_logger()
 
@@ -100,33 +101,56 @@ rate_limit_general = RateLimiter(max_requests=100, window_seconds=3600)  # 100/h
 rate_limit_auth = RateLimiter(max_requests=10, window_seconds=900)       # 10/15min
 rate_limit_research = RateLimiter(max_requests=20, window_seconds=3600)   # 20/hour
 
-async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)):
+# Convenience function for research endpoints
+async def rate_limit_check(request: Request) -> bool:
+    """Rate limit check for research endpoints."""
+    return await rate_limit_research(request)
+
+async def get_current_user(token: Optional[str] = Depends(oauth2_scheme)) -> Optional[AuthenticatedUser]:
     """
     Get current authenticated user from JWT token.
     
-    TODO: Implement in Task 7 (JWT Authentication)
-    - Verify JWT token
-    - Extract user information
-    - Handle token expiration
+    Returns:
+        AuthenticatedUser if token is valid, None for anonymous access
     """
     if not token:
-        return None  # Allow anonymous access for now
+        return None  # Allow anonymous access
     
-    # Placeholder implementation
-    # In real implementation:
-    # try:
-    #     payload = verify_token(token)
-    #     user = await get_user_by_id(payload.get("sub"))
-    #     return user
-    # except JWTError:
-    #     raise HTTPException(
-    #         status_code=status.HTTP_401_UNAUTHORIZED,
-    #         detail="Invalid token"
-    #     )
-    
-    return {"id": "mock_user", "username": "test_user"}
+    try:
+        # Verify JWT token
+        payload = verify_access_token(token)
+        if not payload:
+            return None
+            
+        # Check if token is blacklisted
+        if await TokenBlacklist.is_token_blacklisted(token):
+            return None
+            
+        # Extract user information from token
+        user_id = payload.get("sub")
+        if not user_id:
+            return None
+            
+        # For now, create AuthenticatedUser from payload
+        # In production, you'd fetch from database
+        user_data = {
+            "id": user_id,
+            "email": payload.get("email", "unknown@example.com"),
+            "username": payload.get("username", "unknown"),
+            "full_name": payload.get("full_name"),
+            "is_active": payload.get("is_active", True),
+            "is_verified": payload.get("is_verified", False),
+            "is_superuser": payload.get("is_superuser", False),
+            "scopes": payload.get("scopes", [])
+        }
+        
+        return AuthenticatedUser(**user_data)
+        
+    except Exception as e:
+        logger.warning("Failed to get current user", error=str(e))
+        return None
 
-async def get_current_active_user(current_user: dict = Depends(get_current_user)):
+async def get_current_active_user(current_user: Optional[AuthenticatedUser] = Depends(get_current_user)) -> AuthenticatedUser:
     """Get current active user (requires authentication)."""
     if not current_user:
         raise HTTPException(
@@ -135,11 +159,30 @@ async def get_current_active_user(current_user: dict = Depends(get_current_user)
             headers={"WWW-Authenticate": "Bearer"}
         )
     
-    # TODO: Check if user is active in database
-    if current_user.get("is_active", True) is False:
+    if not current_user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user account"
+        )
+    
+    return current_user
+
+async def get_current_superuser(current_user: AuthenticatedUser = Depends(get_current_active_user)) -> AuthenticatedUser:
+    """Get current active superuser (requires admin privileges)."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required"
+        )
+    
+    return current_user
+
+async def get_verified_user(current_user: AuthenticatedUser = Depends(get_current_active_user)) -> AuthenticatedUser:
+    """Get current verified user (requires email verification)."""
+    if not current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email verification required"
         )
     
     return current_user

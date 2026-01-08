@@ -39,14 +39,22 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = Field(default=7, env="REFRESH_TOKEN_EXPIRE_DAYS")
     
     # Google Custom Search API
-    google_api_key: str = Field(default="", env="GOOGLE_API_KEY")
-    google_cx_id: str = Field(default="", env="GOOGLE_CX_ID")
+    google_api_key: str = Field(default="your-google-api-key", env="GOOGLE_API_KEY")
+    google_search_engine_id: str = Field(default="your-search-engine-id", env="GOOGLE_SEARCH_ENGINE_ID") 
     google_daily_limit: int = Field(default=100, env="GOOGLE_DAILY_LIMIT")
+    google_requests_per_second: int = Field(default=10, env="GOOGLE_REQUESTS_PER_SECOND")
     
     # OpenAI API 設定
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", env="OPENAI_MODEL")
     openai_max_tokens: int = Field(default=4096, env="OPENAI_MAX_TOKENS")
+    openai_temperature: float = Field(default=0.7, env="OPENAI_TEMPERATURE")
+    openai_requests_per_minute: int = Field(default=500, env="OPENAI_REQUESTS_PER_MINUTE")
+    
+    # 內容生成設定
+    content_max_length: int = Field(default=5000, env="CONTENT_MAX_LENGTH")
+    outline_max_sections: int = Field(default=10, env="OUTLINE_MAX_SECTIONS")
+    content_language: str = Field(default="zh-tw", env="CONTENT_LANGUAGE")
     
     # 爬蟲設定
     crawler_delay: float = Field(default=1.0, env="CRAWLER_DELAY")  # 秒
