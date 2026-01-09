@@ -16,8 +16,21 @@ from app.core.database import get_db
 from app.core.security import decode_token, TokenBlacklist
 from app.models.user import User
 from app.schemas.user import TokenPayload
+from app.config import settings
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+# Development mode mock user
+class DevUser:
+    """Mock user for development mode."""
+    def __init__(self):
+        self.id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        self.email = "dev@example.com"
+        self.full_name = "開發者"
+        self.is_active = True
+        self.is_verified = True
+        self.is_superuser = True
 
 
 async def get_current_user(
@@ -27,6 +40,8 @@ async def get_current_user(
     """
     Get current authenticated user from JWT token.
     
+    In development mode with debug=True, accepts 'dev-access-token'.
+    
     Raises:
         HTTPException: If token is invalid or user not found
     """
@@ -35,6 +50,14 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    # Check for missing token
+    if not token:
+        raise credentials_exception
+    
+    # Development mode bypass
+    if settings.debug and token == "dev-access-token":
+        return DevUser()
     
     # Check if token is blacklisted
     if await TokenBlacklist.is_blacklisted(token):

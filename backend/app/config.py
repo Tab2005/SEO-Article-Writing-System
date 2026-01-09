@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     
     # Application
     app_name: str = "SEO Article Writing System"
-    debug: bool = False
+    debug: bool = True  # Set to False in production
     api_v1_prefix: str = "/api/v1"
     
     # Database
