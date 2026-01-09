@@ -1,135 +1,68 @@
 """
-SEO Article Writing System - FastAPI Application Entry Point
+FastAPI Application Entry Point.
 
-This is the main entry point for the FastAPI application.
+SEO Article Writing System - A comprehensive platform for 
+keyword research, competitor analysis, and AI-powered content generation.
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.config import settings
-from app.database import startup_db, shutdown_db, get_db_info, check_db_connection
-from app.core.middleware import setup_middleware, HealthCheckResponse
-from app.core.exceptions import (
-    SEOSystemException,
-    seo_system_exception_handler,
-    http_exception_handler,
-    general_exception_handler
-)
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-# 將在後續任務中添加路由導入
-# from app.api.v1 import auth, research, content
+from app.config import settings
+from app.api.v1 import router as api_v1_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan events."""
+    """
+    Application lifespan manager.
+    
+    Handles startup and shutdown events.
+    """
     # Startup
-    print("🚀 SEO Article Writing System starting up...")
-    print(f"📊 Configuration loaded - Debug: {settings.debug}")
-    print(f"🌐 CORS Origins: {settings.cors_origins}")
-    
-    # Initialize database
-    try:
-        await startup_db()
-    except Exception as e:
-        print(f"❌ Database startup failed: {e}")
-        raise e
-    
-    # TODO: Initialize Redis connection
-    # TODO: Verify external API credentials
-    
+    print(f"🚀 Starting {settings.app_name}...")
     yield
-    
     # Shutdown
-    print("📴 SEO Article Writing System shutting down...")
-    await shutdown_db()
-    # TODO: Close Redis connections
+    print(f"👋 Shutting down {settings.app_name}...")
 
-def create_app() -> FastAPI:
-    """Create and configure FastAPI application."""
+
+def create_application() -> FastAPI:
+    """
+    Application factory.
     
+    Creates and configures the FastAPI application instance.
+    """
     app = FastAPI(
-        title="SEO Article Writing System API",
-        description="AI-powered SEO article writing and research platform",
-        version=settings.app_version,
-        docs_url="/docs" if settings.debug else None,  # Disable docs in production
+        title=settings.app_name,
+        description="SEO Article Writing System API - Keyword research, competitor analysis, and AI content generation.",
+        version="1.0.0",
+        docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,
         lifespan=lifespan,
-        debug=settings.debug
     )
     
-    # Setup middleware
-    setup_middleware(app)
-    
-    # Setup exception handlers
-    app.add_exception_handler(SEOSystemException, seo_system_exception_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(Exception, general_exception_handler)
-    
-    # Health check endpoints
-    @app.get("/")
-    async def root():
-        """Root endpoint for basic health check."""
-        return {
-            "message": "SEO Article Writing System API",
-            "status": "running",
-            "version": settings.app_version,
-            "docs_url": "/docs" if settings.debug else "disabled"
-        }
-    
-    @app.get("/health")
-    async def health_check():
-        """Detailed health check endpoint."""
-        return HealthCheckResponse.get_health_status()
-    
-    @app.get("/health/ready")
-    async def readiness_check():
-        """Readiness check for Kubernetes/Docker deployments."""
-        # Check database connectivity
-        db_connected = await check_db_connection()
-        db_info = await get_db_info()
-        
-        # TODO: Check Redis connectivity
-        # TODO: Check external API availability
-        
-        return {
-            "status": "ready" if db_connected else "unhealthy",
-            "checks": {
-                "database": db_info,
-                "redis": "pending",     # TODO: Implement real check
-                "google_api": "pending",  # TODO: Implement real check
-                "openai_api": "pending"   # TODO: Implement real check
-            }
-        }
-    
-    @app.get("/health/live")
-    async def liveness_check():
-        """Liveness check for Kubernetes/Docker deployments."""
-        return {"status": "alive"}
+    # CORS Middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if settings.debug else ["https://yourdomain.com"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     
     # Include API routers
-    from app.api.v1 import research, content, auth
+    app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
     
-    app.include_router(research.router, prefix=f"{settings.api_v1_prefix}/research", tags=["research"])
-    app.include_router(content.router, prefix=f"{settings.api_v1_prefix}/content", tags=["content"])
-    app.include_router(auth.router, prefix=f"{settings.api_v1_prefix}/auth", tags=["authentication"])
-    
-    # TODO: 在後續任務中添加其他路由
-    
-    print(f"✅ FastAPI application configured with {len(app.routes)} routes")
+    # Health check endpoint
+    @app.get("/health", tags=["Health"])
+    async def health_check():
+        """Health check endpoint."""
+        return {"status": "healthy", "app": settings.app_name}
     
     return app
 
-# 建立 FastAPI 實例
-app = create_app()
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app", 
-        host="0.0.0.0", 
-        port=8000, 
-        reload=settings.debug,
-        log_level="debug" if settings.debug else "info"
-    )
+# Create the application instance
+app = create_application()

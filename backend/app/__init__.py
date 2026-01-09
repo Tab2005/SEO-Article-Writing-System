@@ -1,1 +1,3 @@
-# SEO Article Writing System - Backend Package
+"""
+App package initialization.
+"""

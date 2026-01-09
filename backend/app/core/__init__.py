@@ -1,1 +1,5 @@
-# Core functionality package
+"""
+Core Package.
+
+Contains security, exceptions, and core utilities.
+"""

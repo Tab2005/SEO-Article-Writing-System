@@ -1,1 +1,5 @@
-# Utility functions package
+"""
+Utils Package.
+
+Helper functions and utilities.
+"""
