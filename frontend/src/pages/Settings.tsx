@@ -4,6 +4,7 @@ import {
     XCircle, Loader2, Eye, EyeOff, Key, Globe, Bot
 } from 'lucide-react'
 import api from '../services/api'
+import { useAuthStore } from '../store/authStore'
 
 interface SettingsData {
     google_api_key: string
@@ -23,6 +24,7 @@ interface TestResult {
 }
 
 function Settings() {
+    const { isAuthenticated } = useAuthStore()
     const [settings, setSettings] = useState<SettingsData | null>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -49,21 +51,40 @@ function Settings() {
 
     // Fetch current settings
     useEffect(() => {
-        fetchSettings()
-    }, [])
+        if (isAuthenticated) {
+            fetchSettings()
+        } else {
+            setLoading(false)
+        }
+    }, [isAuthenticated])
 
     const fetchSettings = async () => {
+        if (!isAuthenticated) {
+            setError('請先登入才能訪問系統設定')
+            setLoading(false)
+            return
+        }
+
         try {
             const response = await api.get<SettingsData>('/settings')
             setSettings(response.data)
         } catch (err: any) {
-            setError('無法載入設定')
+            if (err.response?.status === 401) {
+                setError('登入已過期，請重新登入')
+            } else {
+                setError('無法載入設定')
+            }
         } finally {
             setLoading(false)
         }
     }
 
     const handleSave = async () => {
+        if (!isAuthenticated) {
+            setError('請先登入才能儲存設定')
+            return
+        }
+
         setSaving(true)
         setError(null)
         setSuccess(null)
@@ -95,6 +116,15 @@ function Settings() {
     }
 
     const testGoogleSearch = async () => {
+        if (!isAuthenticated) {
+            setGoogleTestResult({
+                service: 'Google Search',
+                success: false,
+                message: '請先登入',
+            })
+            return
+        }
+
         setTestingGoogle(true)
         setGoogleTestResult(null)
 
@@ -113,6 +143,15 @@ function Settings() {
     }
 
     const testOpenai = async () => {
+        if (!isAuthenticated) {
+            setOpenaiTestResult({
+                service: 'OpenAI',
+                success: false,
+                message: '請先登入',
+            })
+            return
+        }
+
         setTestingOpenai(true)
         setOpenaiTestResult(null)
 

@@ -2,6 +2,7 @@
 Database Configuration and Session Management.
 
 Provides async database connection and session handling.
+Supports both SQLite (local development) and PostgreSQL (production).
 """
 
 from typing import AsyncGenerator
@@ -12,23 +13,43 @@ from sqlalchemy.orm import DeclarativeBase
 from app.config import settings
 
 
-# Convert standard PostgreSQL URL to async version
 def get_async_database_url(url: str) -> str:
-    """Convert postgresql:// to postgresql+asyncpg://"""
+    """
+    Convert database URL to async version.
+    
+    - SQLite: sqlite:// -> sqlite+aiosqlite://
+    - PostgreSQL: postgresql:// -> postgresql+asyncpg://
+    """
+    if url.startswith("sqlite://"):
+        return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
     if url.startswith("postgresql://"):
         return url.replace("postgresql://", "postgresql+asyncpg://", 1)
     return url
 
 
-# Create async engine
+# Get database URL
 async_database_url = get_async_database_url(settings.database_url)
-engine = create_async_engine(
-    async_database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-)
+
+# Check if using SQLite
+is_sqlite = "sqlite" in settings.database_url
+
+# Create async engine with appropriate settings
+if is_sqlite:
+    # SQLite settings (no pool)
+    engine = create_async_engine(
+        async_database_url,
+        echo=settings.debug,
+        connect_args={"check_same_thread": False},
+    )
+else:
+    # PostgreSQL settings (with pool)
+    engine = create_async_engine(
+        async_database_url,
+        echo=settings.debug,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+    )
 
 # Create async session factory
 async_session_maker = async_sessionmaker(

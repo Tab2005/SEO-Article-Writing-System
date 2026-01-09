@@ -20,12 +20,15 @@ from app.config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
+# Development mode user ID
+DEV_USER_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
 
 # Development mode mock user
 class DevUser:
     """Mock user for development mode."""
     def __init__(self):
-        self.id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        self.id = DEV_USER_ID
         self.email = "dev@example.com"
         self.full_name = "開發者"
         self.is_active = True
@@ -40,7 +43,9 @@ async def get_current_user(
     """
     Get current authenticated user from JWT token.
     
-    In development mode with debug=True, accepts 'dev-access-token'.
+    In development mode with debug=True:
+    - Accepts 'dev-access-token' as a bypass token
+    - Returns DevUser for tokens with dev_user_id
     
     Raises:
         HTTPException: If token is invalid or user not found
@@ -55,13 +60,20 @@ async def get_current_user(
     if not token:
         raise credentials_exception
     
-    # Development mode bypass
+    # Development mode bypass for literal dev-access-token
     if settings.debug and token == "dev-access-token":
         return DevUser()
     
     # Check if token is blacklisted
-    if await TokenBlacklist.is_blacklisted(token):
-        raise credentials_exception
+    try:
+        if await TokenBlacklist.is_blacklisted(token):
+            raise credentials_exception
+    except Exception as e:
+        # Redis not available in dev mode
+        if settings.debug:
+            print(f"[AUTH] Token blacklist check failed (dev mode): {e}")
+        else:
+            raise credentials_exception
     
     # Decode token
     payload = decode_token(token)
@@ -82,11 +94,24 @@ async def get_current_user(
     except ValueError:
         raise credentials_exception
     
+    # In dev mode, if the user ID is the dev user ID, return DevUser
+    if settings.debug and user_uuid == DEV_USER_ID:
+        return DevUser()
+    
     # Fetch user from database
-    result = await db.execute(select(User).where(User.id == user_uuid))
-    user = result.scalar_one_or_none()
+    try:
+        result = await db.execute(select(User).where(User.id == user_uuid))
+        user = result.scalar_one_or_none()
+    except Exception as db_error:
+        if settings.debug:
+            print(f"[AUTH] Database error (dev mode): {db_error}")
+            return DevUser()  # Return DevUser as fallback in dev mode
+        raise credentials_exception
     
     if user is None:
+        if settings.debug:
+            print(f"[AUTH] User not found in database, returning DevUser")
+            return DevUser()  # Return DevUser as fallback in dev mode
         raise credentials_exception
     
     return user

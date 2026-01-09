@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 
-const API_URL = import.meta.env.VITE_API_URL || '/api/v1'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
 // Create axios instance
 const api = axios.create({
@@ -35,6 +35,39 @@ api.interceptors.response.use(
 
             const { refreshToken, clearAuth } = useAuthStore.getState()
 
+            // For settings page, don't redirect - let the page handle the error
+            if (originalRequest.url?.includes('/settings')) {
+                // Try to refresh token silently
+                if (refreshToken) {
+                    try {
+                        const response = await axios.post(`${API_URL}/auth/refresh`, null, {
+                            params: { refresh_token: refreshToken },
+                        })
+
+                        const { access_token, refresh_token: new_refresh_token } = response.data
+
+                        // Update store
+                        useAuthStore.setState({
+                            accessToken: access_token,
+                            refreshToken: new_refresh_token,
+                        })
+
+                        // Retry original request
+                        originalRequest.headers.Authorization = `Bearer ${access_token}`
+                        return api(originalRequest)
+                    } catch (refreshError) {
+                        // Refresh failed, clear auth but don't redirect
+                        clearAuth()
+                        return Promise.reject(error)
+                    }
+                } else {
+                    // No refresh token
+                    clearAuth()
+                    return Promise.reject(error)
+                }
+            }
+
+            // For other pages, redirect to login
             if (refreshToken) {
                 try {
                     // Try to refresh token
@@ -42,19 +75,19 @@ api.interceptors.response.use(
                         params: { refresh_token: refreshToken },
                     })
 
-                    const { access_token, refresh_token } = response.data
+                    const { access_token, refresh_token: new_refresh_token } = response.data
 
                     // Update store
                     useAuthStore.setState({
                         accessToken: access_token,
-                        refreshToken: refresh_token,
+                        refreshToken: new_refresh_token,
                     })
 
                     // Retry original request
                     originalRequest.headers.Authorization = `Bearer ${access_token}`
                     return api(originalRequest)
                 } catch (refreshError) {
-                    // Refresh failed, clear auth
+                    // Refresh failed, clear auth and redirect
                     clearAuth()
                     window.location.href = '/login'
                 }

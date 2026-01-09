@@ -1,17 +1,18 @@
 import api from './api'
 import { useAuthStore } from '../store/authStore'
 
-interface GoogleLoginResponse {
-    access_token: string
-    refresh_token: string
-    token_type: string
-}
-
-interface User {
+interface UserInfo {
     id: string
     email: string
     full_name?: string
     is_verified: boolean
+}
+
+interface GoogleLoginResponse {
+    access_token: string
+    refresh_token: string
+    token_type: string
+    user: UserInfo
 }
 
 export const authService = {
@@ -19,19 +20,19 @@ export const authService = {
      * Login with Google OAuth access token
      */
     async googleLogin(googleAccessToken: string): Promise<void> {
+        console.log('[AuthService] Starting Google login...')
+
         const response = await api.post<GoogleLoginResponse>('/auth/google', {
             access_token: googleAccessToken,
         })
 
-        const { access_token, refresh_token } = response.data
+        console.log('[AuthService] Got response from backend')
+        const { access_token, refresh_token, user } = response.data
+        console.log('[AuthService] User:', user.email)
 
-        // Get user info
-        const userResponse = await api.get<User>('/auth/me', {
-            headers: { Authorization: `Bearer ${access_token}` },
-        })
-
-        // Update auth store
-        useAuthStore.getState().setAuth(access_token, refresh_token, userResponse.data)
+        // Update auth store with user info from response
+        useAuthStore.getState().setAuth(access_token, refresh_token, user)
+        console.log('[AuthService] Auth state updated, login complete!')
     },
 
     /**
@@ -48,8 +49,8 @@ export const authService = {
     /**
      * Get current user info
      */
-    async getCurrentUser(): Promise<User> {
-        const response = await api.get<User>('/auth/me')
+    async getCurrentUser(): Promise<UserInfo> {
+        const response = await api.get<UserInfo>('/auth/me')
         useAuthStore.getState().setUser(response.data)
         return response.data
     },

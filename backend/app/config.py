@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     debug: bool = True  # Set to False in production
     api_v1_prefix: str = "/api/v1"
     
-    # Database
-    database_url: str = "postgresql://postgres:password@localhost:5432/seo_article_db"
+    # Database - default to SQLite for local development
+    database_url: str = "sqlite:///./seo_article.db"
     
     # Redis
     redis_url: str = "redis://localhost:6379/0"
