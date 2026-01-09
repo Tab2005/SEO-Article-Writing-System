@@ -1,0 +1,34 @@
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuthStore } from './store/authStore'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import Research from './pages/Research'
+import Layout from './components/Layout'
+
+function App() {
+    const { isAuthenticated } = useAuthStore()
+
+    return (
+        <Routes>
+            {/* Public routes */}
+            <Route
+                path="/login"
+                element={isAuthenticated ? <Navigate to="/" replace /> : <Login />}
+            />
+
+            {/* Protected routes */}
+            <Route
+                path="/"
+                element={isAuthenticated ? <Layout /> : <Navigate to="/login" replace />}
+            >
+                <Route index element={<Dashboard />} />
+                <Route path="research" element={<Research />} />
+            </Route>
+
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+    )
+}
+
+export default App

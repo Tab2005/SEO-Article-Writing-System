@@ -1,11 +1,15 @@
 """
 Authentication API Endpoints.
 
-Handles user registration, login, logout, and token management.
+Handles user registration, login (email + Google OAuth), logout, and token management.
 """
+
+from typing import Optional
+from pydantic import BaseModel, EmailStr
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -13,6 +17,7 @@ from app.core.security import (
     JWTManager,
     TokenBlacklist,
     decode_token,
+    get_password_hash,
 )
 from app.api.dependencies import get_current_active_user, oauth2_scheme
 from app.models.user import User
@@ -24,8 +29,14 @@ from app.schemas.user import (
     Token,
 )
 from app.services.user_service import user_service
+from app.services.google_oauth import google_oauth_service
 
 router = APIRouter()
+
+
+class GoogleLoginRequest(BaseModel):
+    """Request schema for Google login."""
+    access_token: str
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
@@ -50,7 +61,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    User login.
+    User login with email/password.
     
     Returns access and refresh tokens.
     Use email as username.
@@ -67,6 +78,68 @@ async def login(
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user",
+        )
+    
+    # Update last login
+    await user_service.update_last_login(db, user)
+    
+    # Generate tokens
+    tokens = JWTManager.create_token_pair(user.id)
+    
+    return Token(**tokens)
+
+
+@router.post("/google", response_model=Token)
+async def google_login(
+    request: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Login with Google OAuth.
+    
+    - **access_token**: Google OAuth access token obtained from frontend
+    
+    Creates a new user if first time login, otherwise returns tokens for existing user.
+    """
+    # Verify Google token and get user info
+    google_user = await google_oauth_service.verify_google_token(request.access_token)
+    
+    if not google_user.get("verified_email"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Google email not verified",
+        )
+    
+    email = google_user.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not provided by Google",
+        )
+    
+    # Check if user exists
+    user = await user_service.get_by_email(db, email)
+    
+    if not user:
+        # Create new user with Google info
+        import secrets
+        random_password = secrets.token_urlsafe(32)
+        
+        user = User(
+            email=email.lower(),
+            hashed_password=get_password_hash(random_password),
+            full_name=google_user.get("name"),
+            is_verified=True,  # Google already verified email
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+        await db.refresh(user)
     
     if not user.is_active:
         raise HTTPException(

@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = None
     google_cx_id: Optional[str] = None
     
+    # Google OAuth
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    
     # OpenAI API
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o-mini"
