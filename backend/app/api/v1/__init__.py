@@ -6,7 +6,7 @@ Aggregates all v1 API endpoints.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, research, content, projects, seo, websocket
+from app.api.v1.endpoints import auth, research, content, projects, seo, websocket, settings
 
 api_v1_router = APIRouter()
 
@@ -16,4 +16,5 @@ api_v1_router.include_router(research.router, prefix="/research", tags=["Researc
 api_v1_router.include_router(content.router, prefix="/content", tags=["Content"])
 api_v1_router.include_router(projects.router, prefix="/projects", tags=["Projects"])
 api_v1_router.include_router(seo.router, prefix="/seo", tags=["SEO"])
+api_v1_router.include_router(settings.router, prefix="/settings", tags=["Settings"])
 api_v1_router.include_router(websocket.router, tags=["WebSocket"])

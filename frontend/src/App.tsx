@@ -6,6 +6,7 @@ import Research from './pages/Research'
 import ContentGeneration from './pages/ContentGeneration'
 import Projects from './pages/Projects'
 import SEOChecker from './pages/SEOChecker'
+import Settings from './pages/Settings'
 import Layout from './components/Layout'
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
                 <Route path="content" element={<ContentGeneration />} />
                 <Route path="projects" element={<Projects />} />
                 <Route path="seo-checker" element={<SEOChecker />} />
+                <Route path="settings" element={<Settings />} />
             </Route>
 
             {/* Fallback */}
