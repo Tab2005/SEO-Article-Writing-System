@@ -3,6 +3,8 @@ import { useAuthStore } from './store/authStore'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Research from './pages/Research'
+import ContentGeneration from './pages/ContentGeneration'
+import Projects from './pages/Projects'
 import Layout from './components/Layout'
 
 function App() {
@@ -23,6 +25,8 @@ function App() {
             >
                 <Route index element={<Dashboard />} />
                 <Route path="research" element={<Research />} />
+                <Route path="content" element={<ContentGeneration />} />
+                <Route path="projects" element={<Projects />} />
             </Route>
 
             {/* Fallback */}

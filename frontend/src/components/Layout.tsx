@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Sparkles, LayoutDashboard, Search, FileText, Settings, LogOut } from 'lucide-react'
+import { Sparkles, LayoutDashboard, Search, FileText, FolderOpen, LogOut } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { authService } from '../services/auth.service'
 
@@ -19,6 +19,7 @@ function Layout() {
         { path: '/', icon: LayoutDashboard, label: '儀表板' },
         { path: '/research', icon: Search, label: '關鍵字研究' },
         { path: '/content', icon: FileText, label: '內容生成' },
+        { path: '/projects', icon: FolderOpen, label: '專案管理' },
     ]
 
     return (
@@ -81,7 +82,7 @@ function Layout() {
             </aside>
 
             {/* Main content */}
-            <main className="flex-1 p-8">
+            <main className="flex-1 p-8 overflow-auto">
                 <Outlet />
             </main>
         </div>
