@@ -2,53 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --primary-color: #0ea5e9;
-  --bg-color: #f8fafc;
-  --text-color: #0f172a;
-}
-
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  @apply bg-gray-50;
+}
+
+html.dark {
+  @apply bg-slate-900;
+}
+
 body {
   font-family: 'Inter', 'Noto Sans TC', sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-color);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+  @apply text-gray-900;
+}
+
+html.dark body {
+  @apply text-gray-100;
 }
 
 /* Custom utility classes */
 @layer components {
   .btn-primary {
-    @apply px-6 py-3 bg-primary-600 text-white font-medium rounded-lg
-           hover:bg-primary-700 focus:outline-none focus:ring-2 
-           focus:ring-primary-500 focus:ring-offset-2
-           transition-all duration-200 ease-in-out;
+    @apply px-6 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 ease-in-out;
   }
-  
+
   .btn-secondary {
-    @apply px-6 py-3 bg-white text-gray-700 font-medium rounded-lg
-           border border-gray-300 hover:bg-gray-50
-           focus:outline-none focus:ring-2 focus:ring-primary-500
-           transition-all duration-200 ease-in-out;
+    @apply px-6 py-3 bg-white text-gray-700 font-medium rounded-lg border border-gray-300 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200 ease-in-out;
   }
-  
+
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100
-           p-6 transition-shadow hover:shadow-md;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6 transition-all duration-300;
   }
-  
+
   .input {
-    @apply w-full px-4 py-3 border border-gray-300 rounded-lg
-           focus:outline-none focus:ring-2 focus:ring-primary-500 
-           focus:border-transparent transition-all;
+    @apply w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all bg-white text-gray-900;
   }
+
+  .sidebar {
+    @apply bg-white border-r border-gray-200;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-lg transition-colors;
+  }
+
+  .nav-item-active {
+    @apply bg-primary-50 text-primary-700;
+  }
+
+  .nav-item-inactive {
+    @apply text-gray-600 hover:bg-gray-50;
+  }
+
+  .page-bg {
+    @apply bg-gray-50;
+  }
+}
+
+/* Dark mode overrides */
+html.dark .btn-secondary {
+  @apply bg-slate-800 text-gray-200 border-slate-600 hover:bg-slate-700;
+}
+
+html.dark .card {
+  @apply bg-slate-800 border-slate-700;
+}
+
+html.dark .input {
+  @apply bg-slate-800 border-slate-600 text-gray-100;
+}
+
+html.dark .sidebar {
+  @apply bg-slate-900 border-slate-700;
+}
+
+html.dark .nav-item-active {
+  @apply bg-primary-900/30 text-primary-400;
+}
+
+html.dark .nav-item-inactive {
+  @apply text-gray-400 hover:bg-slate-800;
+}
+
+html.dark .page-bg {
+  @apply bg-slate-900;
 }
 
 /* Google login button styles */
@@ -69,12 +115,19 @@ body {
   transition: all 0.2s ease;
 }
 
+html.dark .google-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+
 .google-btn:hover {
   background: #f8f9fa;
   border-color: #c6c9cc;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-.google-btn:active {
-  background: #eef0f2;
+html.dark .google-btn:hover {
+  background: #334155;
+  border-color: #64748b;
 }

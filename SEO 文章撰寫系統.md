@@ -12,600 +12,245 @@
 4. **內容生成模組 (Content Generator)**: 串接 LLM (GPT-4o/Gemini) 生成大綱與內文。  
 5. **儲存與快取層 (Data & Cache)**: 儲存搜尋結果以節省 API 費用。
 
-## **2\. 階段 1：研究與競品分析流程 (Detailed Data Flow)**
-
-這是目前開發的重點區塊，資料流向如下：
-
-1. **Keyword Input**: 用戶輸入目標關鍵字。  
-2. **SERP Fetcher**: 呼叫 Google Custom Search API。  
-   * *Input*: Keyword, API Key, CX ID.  
-   * *Output*: List of Objects (Title, Link, Snippet).  
-3. **Content Crawler**: 對前 10 名網址進行異步爬取。  
-   * *Logic*: 提取 \<h1\> 到 \<h3\>，以及 \<meta\> 標籤。  
-4. **Insight Aggregator**: 彙整資料，計算平均字數、標題出現頻率。
-
-## **3\. 技術組件清單 (Technology Stack)**
-
-### **後端技術棧**
-
-| 類別 | 建議技術 | 說明 |
-| :---- | :---- | :---- |
-| **語言** | Python 3.11+ | AI 與爬蟲的最佳生態系 |
-| **API 框架** | FastAPI 0.104+ | 高效處理異步任務與自動 OpenAPI 文件 |
-| **搜尋服務** | Google Custom Search API | 獲取 SERP 數據 (首選) |
-| **網頁爬蟲** | httpx + BeautifulSoup4 | 比 requests 更快的異步抓取方案 |
-| **AI 模型** | OpenAI GPT-4o-mini | 用於分析結構 (高 CP 值) |
-| **資料庫** | PostgreSQL 15+ | 生產環境推薦，支援 JSON 欄位 |
-| **ORM** | SQLAlchemy 2.0 | 強類型與異步支援 |
-| **快取層** | Redis 7+ | 搜尋結果快取與任務佇列 |
-| **任務佇列** | Celery + Redis | 處理長時間爬蟲任務 |
-| **認證** | JWT (python-jose) | 無狀態身份驗證 |
-| **環境管理** | Poetry / uv | 現代化依賴管理工具 |
-
-### **前端技術棧 (Option 3: 專業版)**
-
-| 類別 | 建議技術 | 說明 |
-| :---- | :---- | :---- |
-| **框架** | React 18+ | 主流生態系與豐富組件庫 |
-| **語言** | TypeScript 5+ | 類型安全與更好的開發體驗 |
-| **構建工具** | Vite 5+ | 極速熱更新與優化打包 |
-| **狀態管理** | Zustand / TanStack Query | 輕量級狀態管理 + 服務器狀態 |
-| **UI 組件庫** | shadcn/ui + Tailwind CSS | 可客製化高品質組件 |
-| **表單驗證** | React Hook Form + Zod | 高效能表單與 schema 驗證 |
-| **路由** | React Router v6 | 宣告式路由管理 |
-| **API 通訊** | Axios / Fetch API | RESTful API 呼叫 |
-| **Markdown 編輯器** | TipTap / Monaco Editor | 富文本編輯與即時預覽 |
-| **圖表視覺化** | Recharts / Chart.js | SEO 數據視覺化 |
-
-## **4\. 資料模型設計 (Data Schema)**
-
-為了方便調整，建議定義清晰的資料結構：
-
-### **A. 搜尋結果物件 (SearchResult)**
-
-{  
-  "rank": 1,  
-  "title": "如何在家做義大利麵",  
-  "url": "\[https://example.com/pasta\](https://example.com/pasta)",  
-  "snippet": "本文介紹三種最受歡迎的義大利麵做法...",  
-  "scraped\_at": "2026-01-07T12:00:00Z"  
-}
-
-### **B. 競品分析報告 (AnalysisReport)**
-
-{  
-  "keyword": "義大利麵做法",  
-  "avg\_word\_count": 2450,  
-  "common\_h2\_tags": \["必備材料", "烹飪步驟", "常見問題"\],  
-  "competitor\_data": \[ ...list of SearchResult with structures... \]  
-}
-
-## **3.5\. 前後端架構設計 (Frontend-Backend Architecture)**
-
-本系統採用 **前後端分離架構**，通過 RESTful API 進行通訊。
-
-### **A. 整體架構圖**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      使用者瀏覽器                           │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  React SPA (TypeScript)                              │  │
-│  │  - 關鍵字研究介面                                     │  │
-│  │  - 競品分析儀表板                                     │  │
-│  │  - 文章編輯器 (Markdown)                             │  │
-│  │  - 專案管理                                          │  │
-│  └───────────────────┬──────────────────────────────────┘  │
-└────────────────────────┼────────────────────────────────────┘
-                         │ HTTPS (JWT Token)
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Nginx (反向代理 + SSL 終止)                    │
-└───────────┬─────────────────────────┬───────────────────────┘
-            │                         │
-            ▼                         ▼
-┌───────────────────────┐   ┌─────────────────────────────────┐
-│  FastAPI 應用服務器    │   │  Celery Worker (背景任務)       │
-│  - RESTful API        │   │  - 異步網頁爬取                 │
-│  - WebSocket (可選)    │   │  - 批量內容生成                 │
-│  - 用戶認證           │   │  - 定時更新 SERP                │
-└───────┬───────────────┘   └────────┬────────────────────────┘
-        │                            │
-        ▼                            ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   資料與快取層                               │
-│  ┌──────────────────┐  ┌──────────────────┐                │
-│  │  PostgreSQL      │  │  Redis            │                │
-│  │  - 用戶資料       │  │  - SERP 快取      │                │
-│  │  - 專案資料       │  │  - 任務佇列       │                │
-│  │  - 文章版本       │  │  - Session 儲存   │                │
-│  └──────────────────┘  └──────────────────┘                │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### **B. 後端架構 (FastAPI)**
-
-```
-backend/
-├── app/
-│   ├── main.py                    # FastAPI 應用入口
-│   ├── config.py                  # 環境變數配置
-│   │
-│   ├── api/                       # API 路由層
-│   │   ├── v1/
-│   │   │   ├── __init__.py
-│   │   │   ├── auth.py           # 登入/註冊/JWT
-│   │   │   ├── research.py       # 關鍵字研究端點
-│   │   │   ├── content.py        # 內容生成端點
-│   │   │   ├── projects.py       # 專案管理
-│   │   │   └── webhooks.py       # 第三方整合
-│   │   └── dependencies.py        # 全域依賴注入
-│   │
-│   ├── core/                      # 核心邏輯層
-│   │   ├── security.py           # JWT/密碼加密
-│   │   ├── rate_limiter.py       # API 限流器
-│   │   └── exceptions.py         # 自定義異常
-│   │
-│   ├── services/                  # 業務邏輯層
-│   │   ├── serp_service.py       # Google Search 封裝
-│   │   ├── crawler_service.py    # 網頁爬蟲邏輯
-│   │   ├── llm_service.py        # OpenAI API 封裝
-│   │   ├── analysis_service.py   # 競品分析邏輯
-│   │   └── content_service.py    # 文章生成流程
-│   │
-│   ├── models/                    # SQLAlchemy Models
-│   │   ├── user.py
-│   │   ├── project.py
-│   │   ├── article.py
-│   │   └── search_cache.py
-│   │
-│   ├── schemas/                   # Pydantic Schemas
-│   │   ├── user.py               # UserCreate, UserResponse
-│   │   ├── research.py           # ResearchRequest, ResearchResult
-│   │   └── content.py            # ContentGenerateRequest
-│   │
-│   ├── tasks/                     # Celery 背景任務
-│   │   ├── crawler_tasks.py      # 批量爬蟲任務
-│   │   └── content_tasks.py      # 批量生成任務
-│   │
-│   └── utils/                     # 工具函數
-│       ├── html_parser.py        # HTML 結構提取
-│       ├── seo_analyzer.py       # SEO 指標計算
-│       └── cache_manager.py      # Redis 快取邏輯
-│
-├── tests/                         # 測試目錄
-├── alembic/                       # 資料庫遷移
-├── pyproject.toml                 # Poetry 配置
-└── Dockerfile                     # 容器化部署
-```
-
-### **C. 前端架構 (React + TypeScript)**
-
-```
-frontend/
-├── src/
-│   ├── main.tsx                   # 應用入口
-│   ├── App.tsx                    # 根組件
-│   │
-│   ├── pages/                     # 頁面組件
-│   │   ├── Dashboard.tsx         # 儀表板首頁
-│   │   ├── Research.tsx          # 關鍵字研究頁
-│   │   ├── ContentEditor.tsx     # 文章編輯器
-│   │   ├── Projects.tsx          # 專案列表
-│   │   ├── Login.tsx             # 登入頁
-│   │   └── Settings.tsx          # 設定頁
-│   │
-│   ├── components/                # 可重用組件
-│   │   ├── ui/                   # shadcn/ui 組件
-│   │   ├── KeywordInput.tsx      # 關鍵字輸入框
-│   │   ├── CompetitorCard.tsx    # 競品資訊卡片
-│   │   ├── SEOMetrics.tsx        # SEO 指標視覺化
-│   │   ├── MarkdownEditor.tsx    # 編輯器組件
-│   │   └── LoadingSpinner.tsx    # 載入動畫
-│   │
-│   ├── hooks/                     # 自定義 Hooks
-│   │   ├── useAuth.ts            # 認證狀態管理
-│   │   ├── useResearch.ts        # 研究資料獲取
-│   │   └── useDebounce.ts        # 防抖處理
-│   │
-│   ├── services/                  # API 呼叫層
-│   │   ├── api.ts                # Axios 實例配置
-│   │   ├── auth.service.ts       # 認證 API
-│   │   ├── research.service.ts   # 研究 API
-│   │   └── content.service.ts    # 內容 API
-│   │
-│   ├── store/                     # 狀態管理
-│   │   ├── authStore.ts          # 用戶認證狀態
-│   │   ├── projectStore.ts       # 專案狀態
-│   │   └── uiStore.ts            # UI 控制狀態
-│   │
-│   ├── types/                     # TypeScript 類型定義
-│   │   ├── api.types.ts          # API 回應類型
-│   │   ├── research.types.ts     # 研究相關類型
-│   │   └── content.types.ts      # 內容相關類型
-│   │
-│   ├── utils/                     # 工具函數
-│   │   ├── formatters.ts         # 資料格式化
-│   │   ├── validators.ts         # 表單驗證
-│   │   └── seoHelpers.ts         # SEO 計算工具
-│   │
-│   └── styles/                    # 全域樣式
-│       └── globals.css           # Tailwind + 自定義樣式
-│
-├── public/                        # 靜態資源
-├── index.html                     # HTML 模板
-├── vite.config.ts                 # Vite 配置
-├── tsconfig.json                  # TypeScript 配置
-├── tailwind.config.js             # Tailwind 配置
-└── package.json                   # NPM 依賴
-```
-
-### **D. API 端點設計 (RESTful)**
-
-#### **認證相關**
-```
-POST   /api/v1/auth/register      # 註冊
-POST   /api/v1/auth/login         # 登入
-POST   /api/v1/auth/refresh       # 刷新 Token
-GET    /api/v1/auth/me            # 獲取當前用戶
-```
-
-#### **研究功能**
-```
-POST   /api/v1/research/keyword                # 提交關鍵字研究
-GET    /api/v1/research/{task_id}              # 獲取研究結果
-GET    /api/v1/research/{task_id}/competitors  # 獲取競品詳細資料
-POST   /api/v1/research/{task_id}/export       # 匯出為 JSON/CSV
-```
-
-#### **內容生成**
-```
-POST   /api/v1/content/outline                 # 生成文章大綱
-POST   /api/v1/content/generate                # 生成完整文章
-PATCH  /api/v1/content/{article_id}            # 更新文章
-GET    /api/v1/content/{article_id}/versions   # 獲取版本歷史
-```
-
-#### **專案管理**
-```
-GET    /api/v1/projects                        # 獲取專案列表
-POST   /api/v1/projects                        # 建立新專案
-GET    /api/v1/projects/{id}                   # 獲取專案詳情
-DELETE /api/v1/projects/{id}                   # 刪除專案
-```
-
-#### **快取管理**
-```
-DELETE /api/v1/cache/keyword/{keyword}         # 清除特定關鍵字快取
-DELETE /api/v1/cache/all                       # 清除所有快取
-GET    /api/v1/cache/stats                     # 快取統計資訊
-```
-
-### **E. 資料流範例：關鍵字研究流程**
-
-```
-1. 用戶在前端輸入關鍵字 "義大利麵做法"
-   ↓
-2. React 呼叫: POST /api/v1/research/keyword
-   Body: { "keyword": "義大利麵做法", "market": "tw" }
-   ↓
-3. FastAPI 檢查 Redis 快取
-   - 若命中 → 直接返回快取結果
-   - 若未命中 → 觸發 Celery 任務
-   ↓
-4. Celery Worker 執行:
-   a. 呼叫 Google Custom Search API
-   b. 異步爬取前 10 名網址
-   c. 提取標題結構、字數、關鍵字
-   d. 儲存至 PostgreSQL
-   e. 快取至 Redis (7 天過期)
-   ↓
-5. 前端透過輪詢或 WebSocket 獲取結果
-   GET /api/v1/research/{task_id}
-   ↓
-6. 顯示競品分析儀表板
-   - 平均字數圖表
-   - 常見標題結構
-   - 關鍵字密度分析
-```
-
-### **F. 安全性設計**
-
-| 安全需求 | 實作方案 |
-|---------|---------|
-| **API 認證** | JWT Token (15 分鐘過期) + Refresh Token (7 天) |
-| **密碼儲存** | bcrypt 加密 (10 rounds) |
-| **HTTPS 強制** | Nginx SSL 終止 + HSTS Header |
-| **CORS 控制** | 僅允許前端域名 |
-| **API 限流** | 每用戶 100 請求/小時 (Redis 計數器) |
-| **SQL 注入防護** | SQLAlchemy ORM 參數化查詢 |
-| **XSS 防護** | React 自動轉義 + CSP Header |
-| **敏感資料** | 環境變數 (.env) + Secrets Manager |
-
-### **G. 部署架構 (Docker Compose)**
-
-```yaml
-version: '3.8'
-services:
-  nginx:
-    image: nginx:alpine
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-  
-  backend:
-    build: ./backend
-    environment:
-      - DATABASE_URL=postgresql://user:pass@db:5432/seo_db
-      - REDIS_URL=redis://redis:6379
-    depends_on: [db, redis]
-  
-  celery_worker:
-    build: ./backend
-    command: celery -A app.tasks worker -l info
-    depends_on: [redis, db]
-  
-  frontend:
-    build: ./frontend
-    environment:
-      - VITE_API_URL=https://api.yourdomain.com
-  
-  db:
-    image: postgres:15-alpine
-    volumes: ["postgres_data:/var/lib/postgresql/data"]
-  
-  redis:
-    image: redis:7-alpine
-    volumes: ["redis_data:/data"]
-```
-
-### **H. 開發工作流程**
-
-1. **本地開發**
-   - 後端: `poetry run uvicorn app.main:app --reload`
-   - 前端: `npm run dev`
-   - Celery: `celery -A app.tasks worker`
-
-2. **Git 分支策略**
-   - `main`: 生產環境
-   - `develop`: 開發環境
-   - `feature/*`: 功能分支
-
-3. **CI/CD 流程**
-   - GitHub Actions 自動測試
-   - Docker 映像自動構建
-   - 自動部署至 Staging 環境
-
-
-## **5\. 開發分階段時程 (Development Roadmap)**
-
-### **Phase 1: 後端核心 (2-3 週) ✅ COMPLETED**
-- ✅ FastAPI 專案架構建立 (Task 1-2)
-- ✅ PostgreSQL + SQLAlchemy 資料模型 (Task 3-4)
-- ✅ Google Search API 整合 (Task 5) ✨ **NEW**
-- ✅ 網頁爬蟲服務 (httpx + BeautifulSoup) (Task 5)
-- ✅ JWT 認證系統 (Task 7) ✨ **JUST COMPLETED**
-- ✅ Redis 快取層 (Task 6)
-- ✅ OpenAI API 整合 (Task 6) ✨ **NEW**
-
-### **Phase 2: 前端基礎 (2 週) 🚧 IN PROGRESS**
-- ⏳ React + Vite 專案初始化 (Task 8)
-- ⏳ Tailwind CSS + shadcn/ui 設定 (Task 8)
-- ⏳ 登入/註冊頁面 (Task 8-9)
-- ⏳ 關鍵字研究介面 (Task 9)
-- ⏳ API 整合與狀態管理 (Task 10)
-
-### **Phase 3: 核心功能整合 (2-3 週) ⏳ PLANNED**
-- ⏳ Celery 背景任務系統 (Task 10)
-- ⏳ 競品分析儀表板 (圖表視覺化) (Task 11)
-- ⏳ 完整內容生成流程 (Task 11)
-- ⏳ Markdown 編輯器整合 (Task 12)
-- ⏳ 專案管理功能 (Task 12)
-
-### **Phase 4: 進階功能 (2 週) ⏳ PLANNED**
-- ⏳ WebSocket 即時進度推送 (未規劃)
-- ⏳ SEO 分數檢查器 (未規劃)
-- ⏳ 批量內容生成 (未規劃)
-- ⏳ 資料匯出功能 (CSV/JSON) (未規劃)
-
-### **Phase 5: 優化與部署 (1-2 週) ⏳ PLANNED**
-- ⏳ 單元測試與整合測試 (未規劃)
-- ⏳ Docker Compose 容器化 (未規劃)
-- ⏳ Nginx 反向代理設定 (未規劃)
-- ⏳ CI/CD Pipeline 建立 (未規劃)
-- ⏳ 監控與日誌系統 (Sentry/ELK) (未規劃)
-
-**總開發時間**: 約 9-12 週 (2-3 個月)
-
-### **📊 目前進度追蹤 (截至 2026/01/08)**
-
-**已完成 Tasks: 7/12** 🎯
-
-| Task | 狀態 | 完成日期 | 描述 |
-|------|------|----------|------|
-| Task 1-4 | ✅ | 2025/12 | 基礎架構與數據模型 |
-| Task 5 | ✅ | 2026/01/06 | Google Search API 整合 |
-| Task 6 | ✅ | 2026/01/07 | OpenAI API 整合與內容生成 |
-| Task 7 | ✅ | 2026/01/08 | JWT 認證系統 ✨ **最新完成** |
-| Task 8 | ⏳ | 計劃中 | 電子郵件驗證與通知系統 |
-| Task 9 | ⏳ | 計劃中 | 前端 React 應用開發 |
-| Task 10 | ⏳ | 計劃中 | 背景任務與佇列系統 |
-| Task 11 | ⏳ | 計劃中 | 完整內容生成工作流程 |
-| Task 12 | ⏳ | 計劃中 | 前端整合與優化 |
-
-**當前階段**: Phase 1 ✅ → Phase 2 🚧
-**整體進度**: 58% (7/12 Tasks)
-**預計完成**: 2026/03 月
-
-## **6\. 擴充性設計考量 (Future-Proofing)**
-
-* **適配器模式 (Adapter Pattern)**: 將搜尋邏輯封裝在 Interface 中。未來如果 Google API 太貴，可以輕鬆更換為 Bing 或 DuckDuckGo。  
-* **動態爬蟲開關**: 若遇到 React/Vue 等 JavaScript 渲染的網站，系統應能自動切換至 Playwright (無頭瀏覽器)。
-
-## **7\. 最新技術實現細節 (Latest Technical Implementation) 🆕**
-
-### **A. Task 7: JWT 認證系統架構 (2026/01/08 完成)**
-
-#### **安全模組 (`app/core/security.py`)**
-```python
-# 核心安全類別
-- PasswordValidator: 密碼強度驗證 (長度、大小寫、特殊字元)
-- PasswordManager: bcrypt 密碼哈希與驗證
-- JWTManager: JWT 令牌生命週期管理
-- TokenBlacklist: Redis 基礎的令牌黑名單系統
-
-# JWT 配置
-- Access Token: 30 分鐘過期
-- Refresh Token: 30 天過期  
-- 算法: HS256 (可擴展至 RS256)
-- 令牌黑名單: Redis 實時管理
-```
-
-#### **認證 API 端點實現**
-| 端點 | 功能 | 實現狀態 |
-|------|------|----------|
-| `POST /auth/register` | 用戶註冊 + 密碼驗證 | ✅ 完成 |
-| `POST /auth/login` | JWT 令牌對生成 | ✅ 完成 |
-| `POST /auth/logout` | 令牌黑名單化 | ✅ 完成 |
-| `POST /auth/refresh` | 安全令牌刷新 | ✅ 完成 |
-| `GET /auth/me` | 用戶資料獲取 | ✅ 完成 |
-| `PATCH /auth/me` | 個人資料更新 | ✅ 完成 |
-| `POST /auth/change-password` | 密碼變更 | ✅ 完成 |
-
-#### **依賴注入系統**
-```python
-# 認證依賴層級
-- get_current_user: 基礎 JWT 驗證
-- get_current_active_user: 活躍用戶檢查  
-- get_current_superuser: 管理員權限
-- get_verified_user: 電子郵件驗證狀態
-
-# 使用範例
-@router.get("/protected")
-async def protected_endpoint(
-    user: AuthenticatedUser = Depends(get_current_active_user)
-):
-    return {"user_id": user.id, "scopes": user.scopes}
-```
-
-### **B. Task 5-6: API 整合層實現**
-
-#### **Google Search Service (`app/services/google_search.py`)**
-```python
-class GoogleSearchService:
-    async def search(self, query: str, **kwargs) -> SearchResult
-    async def keyword_research(self, seed_keyword: str) -> KeywordAnalysis
-    async def get_serp_features(self, query: str) -> SerpFeatures
-    
-# 快取策略: 7 天 Redis 快取
-# 錯誤處理: 自動重試 + 降級策略
-# 限流: 每用戶 100 請求/小時
-```
-
-#### **OpenAI LLM Service (`app/services/llm_service.py`)**
-```python
-class LLMService:
-    async def generate_outline(self, topic: str, competitors: List) -> ArticleOutline
-    async def generate_content(self, outline: ArticleOutline) -> ArticleContent  
-    async def optimize_seo(self, content: str, target_keywords: List) -> OptimizedContent
-    
-# 模型: GPT-4o-mini (成本效益最佳)
-# 上下文管理: 16K token 智能切分
-# 回應解析: 結構化 JSON 輸出
-```
-
-### **C. 數據模型實現狀態**
-
-#### **已實現數據表**
-```sql
--- 用戶認證相關
-users: 完整用戶管理 (密碼哈希、角色、統計)
-user_sessions: JWT 令牌追蹤
-
--- 專案管理  
-projects: 多專案隔離 (用戶 → 專案 → 文章)
-articles: 版本控制 + 元數據管理
-search_cache: SERP 結果快取 (7天過期)
-
--- 待實現
-email_templates: 通知系統 (Task 8)
-webhooks: 第三方整合 (未來)
-```
-
-### **D. 當前系統能力**
-
-#### **✅ 已可使用功能**
-1. **用戶認證**: 完整註冊/登錄/令牌管理
-2. **Google 搜索**: 關鍵字研究 + SERP 分析  
-3. **內容生成**: AI 輔助大綱 + 內容創建
-4. **數據管理**: PostgreSQL 持久化 + Redis 快取
-5. **API 安全**: JWT + 密碼加密 + 限流
-
-#### **🔄 開發中功能 (Task 8+)**
-1. **電子郵件驗證**: SMTP 整合 + 範本系統
-2. **前端應用**: React + TypeScript SPA
-3. **即時通知**: WebSocket + 進度追蹤
-4. **批量處理**: Celery 背景任務佇列
-
-### **E. 部署就緒狀態**
-
-#### **後端服務架構**
-```yaml
-# 可立即部署的服務
-Backend API: FastAPI + Uvicorn (生產就緒)
-Database: PostgreSQL 15 + Alembic 遷移
-Cache: Redis 7 + 會話管理  
-Monitoring: 結構化日誌 (Structlog)
-
-# 待實現服務
-Task Queue: Celery + Redis Broker
-Web Server: Nginx 反向代理 + SSL
-Container: Docker Compose 編排
-```
-
-#### **API 測試狀態**
-```bash
-# 已通過測試
-✅ 用戶認證流程 (註冊→登錄→令牌刷新→登出)
-✅ Google Search API 整合
-✅ OpenAI GPT 內容生成  
-✅ 密碼安全性 (bcrypt + 強度驗證)
-✅ JWT 令牌安全性 (生命週期 + 黑名單)
-
-# 待完善測試
-⏳ 大量並發處理
-⏳ 錯誤恢復機制
-⏳ 性能基準測試
-```
-
-### **F. Task 8 準備工作**
-
-#### **電子郵件系統設計**
-```python
-# 即將實現 (下個 Task)
-EmailService:
-  - SMTP 設定 (Gmail/SendGrid 支援)
-  - HTML 範本系統 (Jinja2)
-  - 異步發送佇列
-  - 開封/點擊追蹤
-
-Verification Flow:
-  - 註冊時自動發送驗證信
-  - JWT 令牌包含驗證狀態  
-  - 受保護端點檢查驗證狀態
-  - 重新發送驗證信功能
-```
-
-#### **預期技術挑戰**
-1. **SMTP 可靠性**: 多供應商容錯機制
-2. **範本管理**: 多語言 + 品牌化設計
-3. **垃圾郵件**: SPF/DKIM 設定
-4. **用戶體驗**: 前端驗證狀態同步
+## **2\. 技術組件清單 (Technology Stack)**
+
+### **後端技術棧 ✅ 已實現**
+
+| 類別 | 技術 | 狀態 |
+|------|------|------|
+| **語言** | Python 3.11+ | ✅ |
+| **API 框架** | FastAPI 0.104+ | ✅ |
+| **搜尋服務** | Google Custom Search API | ✅ |
+| **網頁爬蟲** | httpx + BeautifulSoup4 | ✅ |
+| **AI 模型** | OpenAI GPT-4o-mini | ✅ |
+| **資料庫** | PostgreSQL 15+ | ✅ |
+| **ORM** | SQLAlchemy 2.0 (async) | ✅ |
+| **快取層** | Redis 7+ | ✅ |
+| **任務佇列** | Celery + Redis | ✅ |
+| **認證** | JWT + bcrypt + Google OAuth | ✅ |
+
+### **前端技術棧 ✅ 已實現**
+
+| 類別 | 技術 | 狀態 |
+|------|------|------|
+| **框架** | React 18+ | ✅ |
+| **語言** | TypeScript 5+ | ✅ |
+| **構建工具** | Vite 5+ | ✅ |
+| **狀態管理** | Zustand + TanStack Query | ✅ |
+| **UI 樣式** | Tailwind CSS | ✅ |
+| **路由** | React Router v6 | ✅ |
+| **API 通訊** | Axios | ✅ |
+| **認證** | @react-oauth/google | ✅ |
+
+## **3\. 開發進度 (Development Roadmap) ✅ 全部完成**
+
+### **Phase 1: 後端核心 ✅ COMPLETED**
+- ✅ FastAPI 專案架構建立
+- ✅ PostgreSQL + SQLAlchemy 資料模型
+- ✅ Google Search API 整合
+- ✅ 網頁爬蟲服務 (httpx + BeautifulSoup)
+- ✅ JWT 認證系統
+- ✅ Redis 快取層
+- ✅ OpenAI API 整合
+
+### **Phase 2: 前端基礎 ✅ COMPLETED**
+- ✅ React + Vite + TypeScript 專案初始化
+- ✅ Tailwind CSS 設定
+- ✅ Google OAuth 登入頁面 (取代傳統註冊)
+- ✅ 關鍵字研究介面
+- ✅ API 整合與狀態管理
+
+### **Phase 3: 核心功能整合 ✅ COMPLETED**
+- ✅ Celery 背景任務系統
+- ✅ 內容生成頁面
+- ✅ 專案管理功能
+
+### **Phase 4: 進階功能 ✅ COMPLETED**
+- ✅ WebSocket 即時進度推送
+- ✅ SEO 分數檢查器
+- ✅ 資料匯出功能 (CSV/JSON)
+
+### **Phase 5: 優化與部署 ✅ COMPLETED**
+- ✅ Docker Compose 容器化
+- ✅ 單元測試
+- ✅ GitHub Actions CI/CD
+
+**總開發進度**: 100% ✅
 
 ---
 
-**系統現況總結 (2026/01/08)**:
-- 🏗️ **後端核心**: 企業級就緒 (認證、API、資料庫)
-- 🔐 **安全性**: A+ 等級 (JWT + bcrypt + 限流)
-- 🚀 **可擴展性**: 模組化設計 + 快取策略
-- 📊 **下一里程碑**: Task 8 電子郵件系統 → Task 9 前端開發
+## **4\. 專案結構 (Project Structure)**
+
+### **完整目錄結構**
+```
+SEO-Article-Writing-System/
+├── backend/                      # FastAPI 後端
+│   ├── app/
+│   │   ├── main.py              # 應用入口
+│   │   ├── config.py            # 環境配置
+│   │   ├── api/v1/endpoints/    # API 端點
+│   │   │   ├── auth.py          # 認證 (含 Google OAuth)
+│   │   │   ├── research.py      # 關鍵字研究
+│   │   │   ├── content.py       # 內容生成
+│   │   │   ├── projects.py      # 專案管理
+│   │   │   ├── seo.py           # SEO 檢查
+│   │   │   └── websocket.py     # 即時推送
+│   │   ├── core/
+│   │   │   ├── security.py      # JWT + 密碼
+│   │   │   ├── database.py      # 資料庫連線
+│   │   │   ├── celery_app.py    # Celery 配置
+│   │   │   └── websocket.py     # WS 管理器
+│   │   ├── models/              # SQLAlchemy 模型
+│   │   ├── schemas/             # Pydantic 驗證
+│   │   ├── services/            # 業務邏輯
+│   │   │   ├── google_search.py
+│   │   │   ├── crawler_service.py
+│   │   │   ├── analysis_service.py
+│   │   │   ├── llm_service.py
+│   │   │   ├── cache_manager.py
+│   │   │   ├── seo_checker.py
+│   │   │   ├── user_service.py
+│   │   │   └── google_oauth.py
+│   │   ├── tasks/               # Celery 任務
+│   │   └── utils/               # 工具函數
+│   ├── tests/                   # 單元測試
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── frontend/                     # React 前端
+│   ├── src/
+│   │   ├── main.tsx             # 入口 (含 GoogleOAuthProvider)
+│   │   ├── App.tsx              # 路由配置
+│   │   ├── pages/
+│   │   │   ├── Login.tsx        # Google OAuth 登入
+│   │   │   ├── Dashboard.tsx    # 儀表板
+│   │   │   ├── Research.tsx     # 關鍵字研究
+│   │   │   ├── ContentGeneration.tsx  # 內容生成
+│   │   │   ├── SEOChecker.tsx   # SEO 檢查
+│   │   │   └── Projects.tsx     # 專案管理
+│   │   ├── components/
+│   │   │   └── Layout.tsx       # 側邊欄佈局
+│   │   ├── services/            # API 服務
+│   │   ├── store/               # Zustand 狀態
+│   │   ├── hooks/               # React Query hooks
+│   │   └── types/               # TypeScript 類型
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   └── package.json
+│
+├── docker-compose.yml            # 容器編排
+├── .github/workflows/ci.yml      # CI/CD
+└── README.md
+```
+
+---
+
+## **5\. API 端點設計**
+
+### **認證 (含 Google OAuth)**
+```
+POST   /api/v1/auth/register      # 註冊 (email/password)
+POST   /api/v1/auth/login         # 登入
+POST   /api/v1/auth/google        # Google OAuth 登入 ✨
+POST   /api/v1/auth/logout        # 登出 (令牌黑名單)
+POST   /api/v1/auth/refresh       # 刷新 Token
+GET    /api/v1/auth/me            # 獲取當前用戶
+PATCH  /api/v1/auth/me            # 更新個人資料
+POST   /api/v1/auth/change-password  # 密碼變更
+```
+
+### **研究功能**
+```
+GET    /api/v1/research/serp      # 直接獲取 SERP 結果
+GET    /api/v1/research/analyze   # 完整關鍵字分析
+POST   /api/v1/research/keyword   # 提交異步研究任務
+GET    /api/v1/research/{task_id} # 獲取任務狀態
+```
+
+### **內容生成**
+```
+POST   /api/v1/content/outline    # 生成文章大綱
+POST   /api/v1/content/generate   # 生成完整文章
+POST   /api/v1/content/optimize   # SEO 優化內容
+```
+
+### **SEO 檢查**
+```
+POST   /api/v1/seo/analyze        # SEO 分數分析
+POST   /api/v1/seo/export/json    # 匯出 JSON 報告
+```
+
+### **WebSocket**
+```
+WS     /api/v1/ws?token=<jwt>     # 即時進度推送
+```
+
+---
+
+## **6\. 快速開始**
+
+### **開發環境**
+```bash
+# 後端
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 前端
+cd frontend
+npm install
+npm run dev
+```
+
+### **Docker 部署**
+```bash
+# 啟動所有服務
+docker-compose up -d
+
+# 查看狀態
+docker-compose ps
+
+# 查看日誌
+docker-compose logs -f backend
+```
+
+### **環境變數配置**
+
+**後端 `.env`:**
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/seo_db
+REDIS_URL=redis://localhost:6379/0
+SECRET_KEY=your-secret-key
+GOOGLE_API_KEY=your-google-api-key
+GOOGLE_CX_ID=your-cx-id
+GOOGLE_CLIENT_ID=your-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-oauth-secret
+OPENAI_API_KEY=your-openai-key
+```
+
+**前端 `.env.local`:**
+```env
+VITE_GOOGLE_CLIENT_ID=your-oauth-client-id
+```
+
+---
+
+## **7\. 系統功能一覽**
+
+| 功能 | 描述 | 狀態 |
+|------|------|------|
+| **Google OAuth 登入** | 一鍵 Google 帳號登入 | ✅ |
+| **關鍵字研究** | SERP 分析 + 競品爬取 | ✅ |
+| **AI 內容生成** | GPT-4o 大綱 + 文章生成 | ✅ |
+| **SEO 分數檢查** | 標題、密度、結構分析 | ✅ |
+| **專案管理** | 多專案文章管理 | ✅ |
+| **即時進度** | WebSocket 任務追蹤 | ✅ |
+| **資料匯出** | CSV/JSON 格式匯出 | ✅ |
+| **Docker 部署** | 一鍵容器化部署 | ✅ |
+| **CI/CD** | GitHub Actions 自動化 | ✅ |
+
+---
+
+**最後更新**: 2026/01/09  
+**系統版本**: v1.0.0  
+**開發進度**: 100% ✅ 全部完成

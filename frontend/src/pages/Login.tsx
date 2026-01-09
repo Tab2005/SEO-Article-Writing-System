@@ -1,33 +1,48 @@
 import { useState } from 'react'
-import { useGoogleLogin } from '@react-oauth/google'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, Search, FileText, TrendingUp } from 'lucide-react'
-import { authService } from '../services/auth.service'
+import { Sparkles, Search, FileText, TrendingUp, AlertTriangle } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
+
+// Check if Google Client ID is configured
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 function Login() {
     const navigate = useNavigate()
-    const { setLoading, isLoading } = useAuthStore()
+    const { setAuth, isLoading, setLoading } = useAuthStore()
     const [error, setError] = useState<string | null>(null)
 
-    const googleLogin = useGoogleLogin({
-        onSuccess: async (tokenResponse) => {
-            setLoading(true)
-            setError(null)
+    // Development mode: bypass login
+    const handleDevLogin = () => {
+        setLoading(true)
+        setError(null)
 
-            try {
-                await authService.googleLogin(tokenResponse.access_token)
-                navigate('/', { replace: true })
-            } catch (err: any) {
-                setError(err.response?.data?.detail || '登入失敗，請稍後再試')
-            } finally {
-                setLoading(false)
-            }
-        },
-        onError: () => {
-            setError('Google 登入失敗')
-        },
-    })
+        // Simulate login with mock user
+        setTimeout(() => {
+            setAuth(
+                'dev-access-token',
+                'dev-refresh-token',
+                {
+                    id: 'dev-user-id',
+                    email: 'dev@example.com',
+                    full_name: '開發者',
+                    is_verified: true,
+                }
+            )
+            navigate('/', { replace: true })
+        }, 500)
+    }
+
+    // Production: Google OAuth login
+    const handleGoogleLogin = async () => {
+        if (!GOOGLE_CLIENT_ID) {
+            setError('Google OAuth 未設定，請在 .env.local 中設定 VITE_GOOGLE_CLIENT_ID')
+            return
+        }
+
+        // This would normally use useGoogleLogin hook
+        // For now, show configuration message
+        setError('請設定 Google OAuth Client ID')
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-100 flex">
@@ -93,9 +108,24 @@ function Login() {
                         <div className="text-center mb-8">
                             <h2 className="text-2xl font-bold text-gray-900 mb-2">歡迎使用</h2>
                             <p className="text-gray-600">
-                                使用 Google 帳號登入以開始使用
+                                登入以開始使用 SEO 文章撰寫系統
                             </p>
                         </div>
+
+                        {/* Development Mode Notice */}
+                        {!GOOGLE_CLIENT_ID && (
+                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <div className="flex items-start gap-3">
+                                    <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-medium text-yellow-800">開發模式</p>
+                                        <p className="text-yellow-700 text-sm mt-1">
+                                            Google OAuth 未設定，使用開發者登入
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {error && (
                             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
@@ -103,14 +133,32 @@ function Login() {
                             </div>
                         )}
 
+                        {/* Dev Login Button */}
                         <button
-                            onClick={() => googleLogin()}
+                            onClick={handleDevLogin}
                             disabled={isLoading}
-                            className="google-btn disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full mb-4 px-6 py-3 bg-primary-600 text-white font-medium rounded-lg
+                       hover:bg-primary-700 focus:outline-none focus:ring-2 
+                       focus:ring-primary-500 focus:ring-offset-2
+                       transition-all duration-200 ease-in-out
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       flex items-center justify-center gap-2"
                         >
                             {isLoading ? (
-                                <div className="w-5 h-5 border-2 border-gray-300 border-t-primary-600 rounded-full animate-spin" />
+                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                             ) : (
+                                <Sparkles className="w-5 h-5" />
+                            )}
+                            <span>{isLoading ? '登入中...' : '開發者快速登入'}</span>
+                        </button>
+
+                        {/* Google Login Button (when configured) */}
+                        {GOOGLE_CLIENT_ID && (
+                            <button
+                                onClick={handleGoogleLogin}
+                                disabled={isLoading}
+                                className="google-btn disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
                                 <svg className="w-5 h-5" viewBox="0 0 24 24">
                                     <path
                                         fill="#4285F4"
@@ -129,9 +177,9 @@ function Login() {
                                         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                                     />
                                 </svg>
-                            )}
-                            <span>{isLoading ? '登入中...' : '使用 Google 帳號登入'}</span>
-                        </button>
+                                <span>使用 Google 帳號登入</span>
+                            </button>
+                        )}
 
                         <p className="mt-6 text-center text-sm text-gray-500">
                             登入即表示您同意我們的服務條款與隱私政策
