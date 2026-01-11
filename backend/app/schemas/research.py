@@ -70,6 +70,44 @@ class CompetitorData(BaseModel):
     scraped_at: datetime
 
 
+# ===== Topic Theme Schemas =====
+
+class TopicTheme(BaseModel):
+    """Schema for semantic topic theme extracted from competitor headings."""
+    theme_name: str  # e.g. "步驟流程", "工具推薦"
+    coverage_count: int  # How many competitors cover this theme
+    total_competitors: int  # Total competitors analyzed
+    example_headings: List[str] = []  # Sample headings in this theme
+
+
+# ===== TF-IDF Keyword Schemas =====
+
+class KeywordItem(BaseModel):
+    """Schema for a single keyword with score."""
+    term: str
+    score: float
+
+
+class KeywordCount(BaseModel):
+    """Schema for keyword with count."""
+    term: str
+    count: int
+
+
+class KeywordCategories(BaseModel):
+    """Schema for categorized keywords."""
+    high_frequency: List[KeywordItem] = []  # 高頻核心詞
+    semantic_related: List[KeywordItem] = []  # 語意相關詞
+    long_tail: List[KeywordItem] = []  # 長尾關鍵詞
+
+
+class TFIDFAnalysis(BaseModel):
+    """Schema for TF-IDF keyword analysis results."""
+    suggested_keywords: List[KeywordItem] = []  # 建議使用的關鍵詞
+    keyword_categories: KeywordCategories = KeywordCategories()
+    competitor_common_terms: List[KeywordCount] = []  # 競品共同出現的詞
+
+
 class AnalysisReport(BaseModel):
     """Schema for complete competitor analysis report."""
     keyword: str
@@ -79,7 +117,9 @@ class AnalysisReport(BaseModel):
     max_word_count: int
     common_h2_tags: List[str]
     common_h3_tags: List[str]
+    topic_themes: List[TopicTheme] = []  # Semantic topic themes
     keyword_frequency: Dict[str, int]
+    tfidf_analysis: Optional[TFIDFAnalysis] = None  # TF-IDF 關鍵詞分析
     competitor_count: int
     competitors: List[CompetitorData]
     generated_at: datetime

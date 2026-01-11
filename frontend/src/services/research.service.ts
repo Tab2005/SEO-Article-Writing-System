@@ -25,6 +25,36 @@ export interface CompetitorData {
     scraped_at: string
 }
 
+export interface TopicTheme {
+    theme_name: string
+    coverage_count: number
+    total_competitors: number
+    example_headings: string[]
+}
+
+// TF-IDF 關鍵詞分析相關介面
+export interface KeywordItem {
+    term: string
+    score: number
+}
+
+export interface KeywordCount {
+    term: string
+    count: number
+}
+
+export interface KeywordCategories {
+    high_frequency: KeywordItem[]
+    semantic_related: KeywordItem[]
+    long_tail: KeywordItem[]
+}
+
+export interface TFIDFAnalysis {
+    suggested_keywords: KeywordItem[]
+    keyword_categories: KeywordCategories
+    competitor_common_terms: KeywordCount[]
+}
+
 export interface AnalysisReport {
     keyword: string
     market: string
@@ -33,7 +63,9 @@ export interface AnalysisReport {
     max_word_count: number
     common_h2_tags: string[]
     common_h3_tags: string[]
+    topic_themes?: TopicTheme[]
     keyword_frequency: Record<string, number>
+    tfidf_analysis?: TFIDFAnalysis  // TF-IDF 關鍵詞分析
     competitor_count: number
     competitors: CompetitorData[]
     generated_at: string
@@ -86,6 +118,17 @@ export const researchService = {
      */
     async getTaskStatus(taskId: string): Promise<any> {
         const response = await api.get(`/research/${taskId}`)
+        return response.data
+    },
+
+    /**
+     * Analyze topic themes from competitor headings (on-demand)
+     */
+    async analyzeTopicThemes(keyword: string, headings: string[][]): Promise<{ topic_themes: TopicTheme[], error?: string }> {
+        const response = await api.post('/research/analyze-themes', {
+            keyword,
+            headings
+        })
         return response.data
     }
 }

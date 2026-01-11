@@ -13,6 +13,7 @@ import httpx
 from app.config import settings
 from app.core.exceptions import ExternalServiceException, BadRequestException
 from app.schemas.research import SerpResult, SerpResponse
+from app.services.runtime_settings import get_google_search_config
 
 
 class GoogleSearchService:
@@ -21,8 +22,6 @@ class GoogleSearchService:
     BASE_URL = "https://www.googleapis.com/customsearch/v1"
     
     def __init__(self):
-        self.api_key = settings.google_api_key
-        self.cx_id = settings.google_cx_id
         self._client: Optional[httpx.AsyncClient] = None
     
     async def _get_client(self) -> httpx.AsyncClient:
@@ -36,9 +35,10 @@ class GoogleSearchService:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
     
-    def _validate_config(self) -> None:
+    @staticmethod
+    def _validate_config(api_key: Optional[str], cx_id: Optional[str]) -> None:
         """Validate API configuration."""
-        if not self.api_key or not self.cx_id:
+        if not api_key or not cx_id:
             raise BadRequestException(
                 "Google Search API not configured. "
                 "Please set GOOGLE_API_KEY and GOOGLE_CX_ID environment variables."
@@ -69,7 +69,8 @@ class GoogleSearchService:
         Returns:
             SerpResponse with search results
         """
-        self._validate_config()
+        api_key, cx_id = await get_google_search_config()
+        self._validate_config(api_key, cx_id)
         
         # Map market to Google search parameters
         market_config = {
@@ -82,8 +83,8 @@ class GoogleSearchService:
         config = market_config.get(market.lower(), market_config["tw"])
         
         params = {
-            "key": self.api_key,
-            "cx": self.cx_id,
+            "key": api_key,
+            "cx": cx_id,
             "q": keyword,
             "num": min(num_results, 10),  # API limit is 10
             "start": start_index,

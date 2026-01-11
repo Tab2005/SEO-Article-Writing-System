@@ -38,11 +38,12 @@ class Settings(BaseSettings):
     # Google OAuth
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
-    
-    # OpenAI API
-    openai_api_key: Optional[str] = None
-    openai_model: str = "gpt-4o-mini"
-    
+
+    # AI Hub Configuration (replaces OpenAI)
+    ai_provider: str = "zeabur"  # zeabur, google_gemini
+    ai_model: str = "gemini-2.5-flash"
+    ai_api_key: Optional[str] = None
+
     # Rate Limiting
     rate_limit_requests: int = 100
     rate_limit_period_hours: int = 1
@@ -51,6 +52,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore"
 
 
 @lru_cache()

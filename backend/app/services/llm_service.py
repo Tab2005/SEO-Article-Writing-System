@@ -1,64 +1,124 @@
 """
 LLM Service.
 
-Handles OpenAI API integration for content generation.
+Handles AI Hub integration for content generation.
+Uses AI Hub module for unified access to multiple AI providers.
 """
 
 import json
+import asyncio
 from typing import Optional, List, Dict, Any
-
-from openai import AsyncOpenAI
+from functools import partial
 
 from app.config import settings
 from app.core.exceptions import ExternalServiceException, BadRequestException
 from app.schemas.article import ArticleOutline, OutlineSection
+from app.services.ai.zeabur_client import ZeaburAIClient
+from app.services.ai.gemini_client import GoogleGeminiClient
+from app.services.runtime_settings import get_ai_config
 
 
 class LLMService:
-    """Service for OpenAI GPT integration."""
-    
+    """Service for AI Hub integration."""
+
     def __init__(self):
-        self._client: Optional[AsyncOpenAI] = None
-        self.model = settings.openai_model
-    
-    def _get_client(self) -> AsyncOpenAI:
-        """Get or create OpenAI client."""
-        if not settings.openai_api_key:
+        self._zeabur_client: Optional[ZeaburAIClient] = None
+        self._gemini_client: Optional[GoogleGeminiClient] = None
+        self._zeabur_api_key: Optional[str] = None
+        self._gemini_api_key: Optional[str] = None
+
+    async def _get_client(self, provider: str, api_key: Optional[str]):
+        """Get or create AI client based on provider (runtime-configurable)."""
+        if not api_key:
             raise BadRequestException(
-                "OpenAI API not configured. Please set OPENAI_API_KEY environment variable."
+                "AI API not configured. Please set AI_API_KEY in settings or environment variable."
             )
-        
-        if self._client is None:
-            self._client = AsyncOpenAI(api_key=settings.openai_api_key)
-        return self._client
-    
+
+        if provider == "zeabur":
+            if self._zeabur_client is None or self._zeabur_api_key != api_key:
+                self._zeabur_client = ZeaburAIClient(api_key=api_key)
+                self._zeabur_api_key = api_key
+            return self._zeabur_client
+
+        if provider == "google_gemini":
+            if self._gemini_client is None or self._gemini_api_key != api_key:
+                self._gemini_client = GoogleGeminiClient(api_key=api_key)
+                self._gemini_api_key = api_key
+            return self._gemini_client
+
+        raise BadRequestException(f"Unsupported AI provider: {provider}")
+
+    async def _generate_with_ai(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.7,
+        response_format: Optional[Dict] = None
+    ) -> str:
+        """
+        Generate content using AI Hub.
+
+        Args:
+            system_prompt: System instructions
+            user_prompt: User input
+            temperature: Generation temperature
+            response_format: Optional format specification (e.g., {"type": "json_object"})
+
+        Returns:
+            Generated text
+        """
+        provider, model, api_key = await get_ai_config()
+        client = await self._get_client(provider=provider, api_key=api_key)
+
+        # Add JSON instruction if response format is specified
+        if response_format and response_format.get("type") == "json_object":
+            system_prompt += "\n\nIMPORTANT: You must respond with valid JSON only. No additional text or explanation."
+
+        try:
+            # Both clients support generate_content with similar interface
+            # Run in thread pool since clients are synchronous
+            loop = asyncio.get_event_loop()
+            content = await loop.run_in_executor(
+                None,
+                partial(
+                    client.generate_content,
+                    prompt=user_prompt,
+                    model=model,
+                    system_prompt=system_prompt,
+                    temperature=temperature
+                )
+            )
+            return content
+        except Exception as e:
+            raise ExternalServiceException(f"AI generation error: {str(e)}")
+
     async def generate_outline(
         self,
         topic: str,
         target_keyword: str,
+        secondary_keywords: Optional[List[str]] = None,
         competitor_h2s: Optional[List[str]] = None,
         word_count_target: int = 2000,
         tone: str = "professional",
     ) -> ArticleOutline:
         """
         Generate SEO-optimized article outline.
-        
+
         Args:
             topic: Article topic
             target_keyword: Main SEO keyword
+            secondary_keywords: Additional keywords to include
             competitor_h2s: Common H2 headings from competitors
             word_count_target: Target word count
             tone: Writing tone
-            
+
         Returns:
             ArticleOutline with structured sections
         """
-        client = self._get_client()
-        
         competitor_context = ""
         if competitor_h2s:
             competitor_context = f"\n\n競爭對手常見的 H2 標題：\n" + "\n".join(f"- {h}" for h in competitor_h2s[:10])
-        
+
         system_prompt = """你是一位專業的 SEO 內容策略師。你的任務是根據目標關鍵字和競品分析，生成一個優化的文章大綱。
 
 請以 JSON 格式回傳大綱，結構如下：
@@ -84,10 +144,14 @@ class LLMService:
     "target_keywords": ["主關鍵字", "長尾關鍵字1", "長尾關鍵字2"]
 }"""
 
+        secondary_context = ""
+        if secondary_keywords:
+            secondary_context = f"\n次要關鍵字：{', '.join(secondary_keywords)}"
+
         user_prompt = f"""請為以下主題生成一個 SEO 優化的文章大綱：
 
 主題：{topic}
-目標關鍵字：{target_keyword}
+目標關鍵字：{target_keyword}{secondary_context}
 目標字數：{word_count_target} 字
 寫作風格：{tone}
 {competitor_context}
@@ -96,22 +160,19 @@ class LLMService:
 1. 標題和 H2 標題都包含目標關鍵字或相關變體
 2. 大綱結構清晰，易於閱讀
 3. 包含常見問題 (FAQ) 段落
-4. 涵蓋競爭對手的重要主題，但要有獨特觀點"""
+4. 涵蓋競爭對手的重要主題，但要有獨特觀點
+5. 自然融入次要關鍵字"""
 
         try:
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+            content = await self._generate_with_ai(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
                 temperature=0.7,
-                response_format={"type": "json_object"},
+                response_format={"type": "json_object"}
             )
-            
-            content = response.choices[0].message.content
+
             data = json.loads(content)
-            
+
             # Parse sections recursively
             def parse_section(section_data: Dict[str, Any]) -> OutlineSection:
                 return OutlineSection(
@@ -122,9 +183,9 @@ class LLMService:
                         parse_section(sub) for sub in section_data.get("subsections", [])
                     ],
                 )
-            
+
             sections = [parse_section(s) for s in data.get("sections", [])]
-            
+
             return ArticleOutline(
                 title=data.get("title", topic),
                 meta_description=data.get("meta_description", ""),
@@ -132,12 +193,12 @@ class LLMService:
                 estimated_word_count=data.get("estimated_word_count", word_count_target),
                 target_keywords=data.get("target_keywords", [target_keyword]),
             )
-            
+
         except json.JSONDecodeError as e:
             raise ExternalServiceException(f"Failed to parse LLM response: {e}")
         except Exception as e:
-            raise ExternalServiceException(f"OpenAI API error: {str(e)}")
-    
+            raise ExternalServiceException(f"AI API error: {str(e)}")
+
     async def generate_section_content(
         self,
         section: OutlineSection,
@@ -146,19 +207,17 @@ class LLMService:
     ) -> str:
         """
         Generate content for a single section.
-        
+
         Args:
             section: OutlineSection to expand
             context: Additional context (article summary, etc.)
             target_keyword: Main keyword for SEO
-            
+
         Returns:
             Generated markdown content
         """
-        client = self._get_client()
-        
         key_points_text = "\n".join(f"- {point}" for point in section.key_points)
-        
+
         system_prompt = """你是一位專業的 SEO 內容作家。你的任務是根據大綱段落生成高質量的內容。
 
 寫作準則：
@@ -182,40 +241,37 @@ class LLMService:
 請直接輸出 Markdown 格式的內容，以適當的標題開始。"""
 
         try:
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.7,
+            content = await self._generate_with_ai(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7
             )
-            
-            return response.choices[0].message.content or ""
-            
+
+            return content or ""
+
         except Exception as e:
-            raise ExternalServiceException(f"OpenAI API error: {str(e)}")
-    
+            raise ExternalServiceException(f"AI API error: {str(e)}")
+
     async def generate_full_article(
         self,
         outline: ArticleOutline,
         target_keyword: str,
+        secondary_keywords: Optional[List[str]] = None,
     ) -> str:
         """
         Generate complete article from outline.
-        
+
         Args:
             outline: Complete article outline
             target_keyword: Main SEO keyword
-            
+            secondary_keywords: Additional keywords to include
+
         Returns:
             Full article in Markdown format
         """
-        client = self._get_client()
-        
         # Format outline for prompt
         outline_text = f"# {outline.title}\n\n"
-        
+
         def format_section(section: OutlineSection, indent: int = 0) -> str:
             prefix = "  " * indent
             result = f"{prefix}- {section.heading}\n"
@@ -224,10 +280,10 @@ class LLMService:
             for sub in section.subsections:
                 result += format_section(sub, indent + 1)
             return result
-        
+
         for section in outline.sections:
             outline_text += format_section(section)
-        
+
         system_prompt = """你是一位專業的 SEO 內容作家。你的任務是根據提供的大綱生成完整的文章。
 
 寫作準則：
@@ -238,33 +294,34 @@ class LLMService:
 5. 包含引人入勝的開頭和總結
 6. 在適當位置添加重點標示（粗體、項目符號等）"""
 
+        secondary_text = ""
+        if secondary_keywords:
+            secondary_text = f"\n次要關鍵字：{', '.join(secondary_keywords)}"
+
         user_prompt = f"""請根據以下大綱生成一篇完整的 SEO 文章：
 
-目標關鍵字：{target_keyword}
+目標關鍵字：{target_keyword}{secondary_text}
 Meta 描述：{outline.meta_description}
 目標字數：{outline.estimated_word_count}
 
 大綱：
 {outline_text}
 
-請直接輸出完整的 Markdown 格式文章，不需要任何額外說明。"""
+請直接輸出完整的 Markdown 格式文章，不需要任何額外說明。
+確保自然融入所有目標關鍵字。"""
 
         try:
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.7,
-                max_tokens=4000,
+            content = await self._generate_with_ai(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7
             )
-            
-            return response.choices[0].message.content or ""
-            
+
+            return content or ""
+
         except Exception as e:
-            raise ExternalServiceException(f"OpenAI API error: {str(e)}")
-    
+            raise ExternalServiceException(f"AI API error: {str(e)}")
+
     async def optimize_content(
         self,
         content: str,
@@ -272,18 +329,16 @@ Meta 描述：{outline.meta_description}
     ) -> str:
         """
         Optimize existing content for SEO.
-        
+
         Args:
             content: Original content
             target_keywords: Keywords to optimize for
-            
+
         Returns:
             Optimized content
         """
-        client = self._get_client()
-        
         keywords_text = ", ".join(target_keywords)
-        
+
         system_prompt = """你是一位 SEO 專家。你的任務是優化文章內容以提高搜尋引擎排名。
 
 優化重點：
@@ -303,19 +358,97 @@ Meta 描述：{outline.meta_description}
 請返回優化後的 Markdown 格式內容。"""
 
         try:
-            response = await client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.5,
+            optimized = await self._generate_with_ai(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.5
             )
-            
-            return response.choices[0].message.content or content
-            
+
+            return optimized or content
+
         except Exception as e:
-            raise ExternalServiceException(f"OpenAI API error: {str(e)}")
+            raise ExternalServiceException(f"AI API error: {str(e)}")
+
+    async def extract_themes(
+        self,
+        headings_by_competitor: List[List[str]],
+        keyword: str,
+        top_n: int = 8,
+    ) -> List[Dict[str, Any]]:
+        """
+        Extract semantic topic themes from competitor headings using LLM.
+
+        Args:
+            headings_by_competitor: List of heading lists, one per competitor
+            keyword: Target keyword for context
+            top_n: Number of themes to return
+
+        Returns:
+            List of theme dictionaries with name, coverage, and examples
+        """
+        # Flatten and prepare headings with competitor index
+        all_headings_text = ""
+        total_competitors = len([h for h in headings_by_competitor if h])
+
+        for i, headings in enumerate(headings_by_competitor):
+            if headings:
+                all_headings_text += f"\n競爭者 {i+1}:\n"
+                for h in headings[:8]:  # Limit per competitor
+                    all_headings_text += f"  - {h}\n"
+
+        if not all_headings_text.strip():
+            return []
+
+        system_prompt = """你是一位 SEO 專家。分析競爭者文章的 H2 標題，歸納出語意主題類別。
+
+請以 JSON 格式回傳主題分析結果：
+{
+    "themes": [
+        {
+            "theme_name": "主題名稱（2-4個字）",
+            "coverage_count": 3,
+            "example_headings": ["標題1", "標題2"]
+        }
+    ]
+}
+
+注意：
+1. 主題名稱應該簡短、具有概括性（如「步驟流程」「工具推薦」「定義說明」「比較評測」）
+2. coverage_count 是有多少個競爭者涵蓋這個主題
+3. example_headings 是屬於這個主題的2-3個範例標題"""
+
+        user_prompt = f"""請分析以下 {total_competitors} 個競爭者的 H2 標題，找出主要的語意主題：
+
+目標關鍵字：{keyword}
+
+競爭者標題：
+{all_headings_text}
+
+請歸納出最重要的 {top_n} 個主題類別。"""
+
+        try:
+            content = await self._generate_with_ai(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.3,
+                response_format={"type": "json_object"}
+            )
+
+            data = json.loads(content)
+
+            themes = data.get("themes", [])
+
+            # Add total_competitors to each theme
+            for theme in themes:
+                theme["total_competitors"] = total_competitors
+
+            return themes[:top_n]
+
+        except json.JSONDecodeError:
+            return []
+        except Exception as e:
+            # Return empty list on error, don't fail the whole analysis
+            return []
 
 
 # Singleton instance

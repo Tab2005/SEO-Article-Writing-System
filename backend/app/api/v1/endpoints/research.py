@@ -79,8 +79,7 @@ async def analyze_keyword(
     Perform complete keyword analysis (synchronous).
     
     Fetches SERP, crawls competitors, and generates report.
-    Note: This is a synchronous endpoint for testing.
-    For production, use POST /keyword for async processing.
+    Topic themes are NOT included - use POST /analyze-themes to get them.
     """
     # Step 1: Get SERP results
     serp_response = await google_search_service.search(
@@ -93,7 +92,7 @@ async def analyze_keyword(
     urls = [result.url for result in serp_response.results]
     competitors = await crawler_service.crawl_pages(urls)
     
-    # Step 3: Generate analysis report
+    # Step 3: Generate analysis report (without topic themes)
     report = analysis_service.generate_report(
         keyword=keyword,
         market=market,
@@ -102,6 +101,50 @@ async def analyze_keyword(
     
     return report
 
+
+@router.post("/analyze-themes")
+async def analyze_topic_themes(
+    request: dict,
+):
+    """
+    Analyze competitor headings to extract semantic topic themes.
+    
+    This is a separate endpoint to be called on-demand after initial analysis.
+    
+    - **keyword**: Target keyword for context
+    - **headings**: List of H2 heading lists, one per competitor
+    """
+    from app.services import llm_service
+    from app.schemas.research import TopicTheme
+    
+    keyword = request.get("keyword", "")
+    headings = request.get("headings", [])
+    
+    if not keyword or not headings:
+        return {"topic_themes": [], "error": "Missing keyword or headings"}
+    
+    try:
+        # Call LLM to analyze themes
+        themes_data = await llm_service.extract_themes(
+            headings_by_competitor=headings,
+            keyword=keyword,
+            top_n=8,
+        )
+        
+        # Convert to TopicTheme objects
+        topic_themes = [
+            TopicTheme(
+                theme_name=t.get("theme_name", ""),
+                coverage_count=t.get("coverage_count", 0),
+                total_competitors=t.get("total_competitors", len(headings)),
+                example_headings=t.get("example_headings", []),
+            )
+            for t in themes_data
+        ]
+        
+        return {"topic_themes": topic_themes}
+    except Exception as e:
+        return {"topic_themes": [], "error": str(e)}
 
 @router.get("/{task_id}", response_model=ResearchTaskStatus)
 async def get_research_result(task_id: str):

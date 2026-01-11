@@ -4,6 +4,7 @@ import { ArticleOutline } from '../types/content.types'
 export interface OutlineRequest {
     topic: string
     target_keyword: string
+    secondary_keywords?: string[]
     word_count_target?: number
     tone?: string
     use_competitor_analysis?: boolean
@@ -13,6 +14,7 @@ export interface OutlineRequest {
 export interface ContentRequest {
     topic: string
     target_keyword: string
+    secondary_keywords?: string[]
     word_count_target?: number
     tone?: string
     market?: string
@@ -23,6 +25,7 @@ export interface ContentResponse {
     content: string
     word_count: number
     target_keyword: string
+    secondary_keywords?: string[]
 }
 
 export const contentService = {

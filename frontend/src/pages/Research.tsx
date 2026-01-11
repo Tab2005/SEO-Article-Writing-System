@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Search, Loader2, Globe, FileText, BarChart3, ExternalLink, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
-import { researchService, AnalysisReport, CompetitorData } from '../services/research.service'
+import { Search, Loader2, Globe, FileText, BarChart3, ExternalLink, ChevronDown, ChevronUp, AlertCircle, Hash, Heading1, Clock, Sparkles, Tags, TrendingUp } from 'lucide-react'
+import { researchService, AnalysisReport, CompetitorData, TopicTheme } from '../services/research.service'
 
 function Research() {
     const [keyword, setKeyword] = useState('')
@@ -10,6 +10,10 @@ function Research() {
     const [error, setError] = useState<string | null>(null)
     const [expandedCompetitor, setExpandedCompetitor] = useState<number | null>(null)
 
+    // Topic themes state
+    const [isAnalyzingThemes, setIsAnalyzingThemes] = useState(false)
+    const [topicThemes, setTopicThemes] = useState<TopicTheme[]>([])
+
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!keyword.trim()) return
@@ -17,6 +21,7 @@ function Research() {
         setIsLoading(true)
         setError(null)
         setResults(null)
+        setTopicThemes([])  // Reset themes on new search
 
         try {
             const data = await researchService.analyzeKeyword(keyword.trim(), market, 10)
@@ -26,6 +31,22 @@ function Research() {
             setError(message)
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleAnalyzeThemes = async () => {
+        if (!results) return
+
+        setIsAnalyzingThemes(true)
+        try {
+            // Collect H2 headings from all competitors
+            const headings = results.competitors.map(comp => comp.headings.h2)
+            const response = await researchService.analyzeTopicThemes(results.keyword, headings)
+            setTopicThemes(response.topic_themes || [])
+        } catch (err: any) {
+            console.error('Theme analysis failed:', err)
+        } finally {
+            setIsAnalyzingThemes(false)
         }
     }
 
@@ -165,39 +186,171 @@ function Research() {
                         </div>
                     </div>
 
-                    {/* Common Headings */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Keyword Frequency */}
+                    {results.keyword_frequency && Object.keys(results.keyword_frequency).length > 0 && (
                         <div className="card">
-                            <h3 className="font-semibold text-gray-900 mb-4">常見 H2 標題</h3>
-                            {results.common_h2_tags.length > 0 ? (
-                                <ul className="space-y-2">
-                                    {results.common_h2_tags.slice(0, 8).map((tag, index) => (
-                                        <li key={index} className="flex items-start gap-2">
-                                            <span className="text-primary-600 font-medium text-sm">{index + 1}.</span>
-                                            <span className="text-gray-700 text-sm">{tag}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <p className="text-gray-500 text-sm">無資料</p>
-                            )}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
+                                    <Hash className="w-5 h-5 text-orange-600" />
+                                </div>
+                                <h3 className="font-semibold text-gray-900">關鍵字出現頻率</h3>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {Object.entries(results.keyword_frequency).map(([position, count]) => (
+                                    <div key={position} className="text-center p-3 bg-gray-50 rounded-lg">
+                                        <p className="text-2xl font-bold text-gray-900">{count}</p>
+                                        <p className="text-xs text-gray-500 mt-1 uppercase">{position}</p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+                    )}
 
+                    {/* TF-IDF Keyword Analysis */}
+                    {results.tfidf_analysis && results.tfidf_analysis.suggested_keywords.length > 0 && (
                         <div className="card">
-                            <h3 className="font-semibold text-gray-900 mb-4">常見 H3 標題</h3>
-                            {results.common_h3_tags.length > 0 ? (
-                                <ul className="space-y-2">
-                                    {results.common_h3_tags.slice(0, 8).map((tag, index) => (
-                                        <li key={index} className="flex items-start gap-2">
-                                            <span className="text-primary-600 font-medium text-sm">{index + 1}.</span>
-                                            <span className="text-gray-700 text-sm">{tag}</span>
-                                        </li>
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg flex items-center justify-center">
+                                    <Tags className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-gray-900 dark:text-gray-100">TF-IDF 關鍵詞分析</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">從競品提取的高頻關鍵詞建議</p>
+                                </div>
+                            </div>
+
+                            {/* Keyword Categories */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                {/* High Frequency */}
+                                <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <TrendingUp className="w-4 h-4 text-blue-600" />
+                                        <h4 className="font-medium text-blue-800 dark:text-blue-300">高頻核心詞</h4>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {results.tfidf_analysis.keyword_categories.high_frequency.slice(0, 8).map((kw, i) => (
+                                            <span key={i} className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 text-sm rounded-full">
+                                                {kw.term}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Semantic Related */}
+                                <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Sparkles className="w-4 h-4 text-green-600" />
+                                        <h4 className="font-medium text-green-800 dark:text-green-300">語意相關詞</h4>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {results.tfidf_analysis.keyword_categories.semantic_related.slice(0, 8).map((kw, i) => (
+                                            <span key={i} className="px-2 py-1 bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-200 text-sm rounded-full">
+                                                {kw.term}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Long Tail */}
+                                <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <FileText className="w-4 h-4 text-purple-600" />
+                                        <h4 className="font-medium text-purple-800 dark:text-purple-300">長尾關鍵詞</h4>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {results.tfidf_analysis.keyword_categories.long_tail.slice(0, 6).map((kw, i) => (
+                                            <span key={i} className="px-2 py-1 bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-200 text-sm rounded-full">
+                                                {kw.term}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* All Suggested Keywords */}
+                            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">所有建議關鍵詞（依重要性排序）</h4>
+                                <div className="flex flex-wrap gap-2">
+                                    {results.tfidf_analysis.suggested_keywords.slice(0, 20).map((kw, i) => (
+                                        <span
+                                            key={i}
+                                            className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded hover:bg-primary-100 hover:text-primary-700 dark:hover:bg-primary-900 dark:hover:text-primary-300 transition-colors cursor-default"
+                                            title={`分數: ${kw.score.toFixed(4)}`}
+                                        >
+                                            {kw.term}
+                                        </span>
                                     ))}
-                                </ul>
-                            ) : (
-                                <p className="text-gray-500 text-sm">無資料</p>
+                                </div>
+                            </div>
+
+                            {/* Competitor Common Terms */}
+                            {results.tfidf_analysis.competitor_common_terms.length > 0 && (
+                                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">競品共同出現詞彙</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {results.tfidf_analysis.competitor_common_terms.slice(0, 15).map((kw, i) => (
+                                            <span
+                                                key={i}
+                                                className="px-2 py-1 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 text-sm rounded-full"
+                                            >
+                                                {kw.term} <span className="text-xs opacity-70">({kw.count}篇)</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
                             )}
                         </div>
+                    )}
+
+                    {/* Topic Themes Analysis */}
+                    <div className="card">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold text-gray-900">📊 競爭者涵蓋主題</h3>
+                            {topicThemes.length === 0 && (
+                                <button
+                                    onClick={handleAnalyzeThemes}
+                                    disabled={isAnalyzingThemes}
+                                    className="btn-primary flex items-center gap-2 text-sm py-2 px-4"
+                                >
+                                    {isAnalyzingThemes ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            分析中...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4" />
+                                            AI 主題分析
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+                        {topicThemes.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {topicThemes.map((theme, index) => (
+                                    <div key={index} className="p-4 bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg border border-primary-100">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="font-medium text-gray-900">{theme.theme_name}</span>
+                                            <span className="text-sm bg-primary-600 text-white px-2 py-0.5 rounded-full">
+                                                {theme.coverage_count}/{theme.total_competitors} 篇
+                                            </span>
+                                        </div>
+                                        {theme.example_headings.length > 0 && (
+                                            <ul className="text-sm text-gray-600 mt-2">
+                                                {theme.example_headings.slice(0, 2).map((ex, i) => (
+                                                    <li key={i} className="truncate">• {ex}</li>
+                                                ))}
+                                            </ul>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : !isAnalyzingThemes ? (
+                            <p className="text-gray-500 text-sm">
+                                點擊「AI 主題分析」按鈕，使用 AI 分析競爭者文章的主題架構
+                            </p>
+                        ) : null}
                     </div>
 
                     {/* Competitor List */}
@@ -236,6 +389,20 @@ function Research() {
 
                                     {expandedCompetitor === competitor.rank && (
                                         <div className="p-4 pt-0 border-t border-gray-100 bg-gray-50">
+                                            {/* H1 Headings */}
+                                            {competitor.headings.h1 && competitor.headings.h1.length > 0 && (
+                                                <div className="mt-4 p-3 bg-primary-50 rounded-lg">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Heading1 className="w-4 h-4 text-primary-600" />
+                                                        <h4 className="text-sm font-medium text-primary-700">H1 標題</h4>
+                                                    </div>
+                                                    <ul className="text-sm text-primary-800 space-y-1">
+                                                        {competitor.headings.h1.map((h, i) => (
+                                                            <li key={i} className="font-medium">• {h}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                                                 <div>
                                                     <h4 className="text-sm font-medium text-gray-700 mb-2">H2 標題</h4>
@@ -271,7 +438,13 @@ function Research() {
                                                     <p className="text-sm text-gray-600">{competitor.meta_description}</p>
                                                 </div>
                                             )}
-                                            <div className="mt-4">
+                                            {competitor.meta_keywords && (
+                                                <div className="mt-4">
+                                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Meta 關鍵字</h4>
+                                                    <p className="text-sm text-gray-600">{competitor.meta_keywords}</p>
+                                                </div>
+                                            )}
+                                            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
                                                 <a
                                                     href={competitor.url}
                                                     target="_blank"
@@ -281,6 +454,12 @@ function Research() {
                                                     <ExternalLink className="w-4 h-4" />
                                                     在新視窗開啟
                                                 </a>
+                                                {competitor.scraped_at && (
+                                                    <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                                        <Clock className="w-3 h-3" />
+                                                        抓取時間：{new Date(competitor.scraped_at).toLocaleString('zh-TW')}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     )}
@@ -289,24 +468,27 @@ function Research() {
                         </div>
                     </div>
                 </>
-            )}
+            )
+            }
 
             {/* Empty State */}
-            {!results && !isLoading && !error && (
-                <div className="card flex flex-col items-center justify-center py-16 text-center">
-                    <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                        <Search className="w-10 h-10 text-gray-400" />
+            {
+                !results && !isLoading && !error && (
+                    <div className="card flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+                            <Search className="w-10 h-10 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                            開始你的關鍵字研究
+                        </h3>
+                        <p className="text-gray-500 max-w-md">
+                            輸入目標關鍵字，系統將自動分析 Google 搜尋結果，
+                            提供競爭對手分析、字數統計和內容結構建議。
+                        </p>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        開始你的關鍵字研究
-                    </h3>
-                    <p className="text-gray-500 max-w-md">
-                        輸入目標關鍵字，系統將自動分析 Google 搜尋結果，
-                        提供競爭對手分析、字數統計和內容結構建議。
-                    </p>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     )
 }
 

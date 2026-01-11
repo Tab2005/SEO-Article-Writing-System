@@ -23,7 +23,9 @@ class APISettings(BaseModel):
     """API Settings schema."""
     google_api_key: Optional[str] = Field(default="", description="Google Custom Search API Key")
     google_cx_id: Optional[str] = Field(default="", description="Google Custom Search Engine ID")
-    openai_api_key: Optional[str] = Field(default="", description="OpenAI API Key")
+    ai_provider: Optional[str] = Field(default="zeabur", description="AI Provider (zeabur, google_gemini)")
+    ai_model: Optional[str] = Field(default="gemini-2.5-flash", description="AI Model")
+    ai_api_key: Optional[str] = Field(default="", description="AI API Key")
     google_client_id: Optional[str] = Field(default="", description="Google OAuth Client ID")
     google_client_secret: Optional[str] = Field(default="", description="Google OAuth Client Secret")
 
@@ -32,11 +34,13 @@ class SettingsResponse(BaseModel):
     """Settings response with masked keys."""
     google_api_key: str = ""
     google_cx_id: str = ""
-    openai_api_key: str = ""
+    ai_provider: str = "zeabur"
+    ai_model: str = "gemini-2.5-flash"
+    ai_api_key: str = ""
     google_client_id: str = ""
     google_client_secret: str = ""
     has_google_api: bool = False
-    has_openai_api: bool = False
+    has_ai_api: bool = False
     has_google_oauth: bool = False
 
 
@@ -71,19 +75,23 @@ async def get_settings(
         settings_data = {
             "google_api_key": app_settings.google_api_key or "",
             "google_cx_id": app_settings.google_cx_id or "",
-            "openai_api_key": app_settings.openai_api_key or "",
+            "ai_provider": getattr(app_settings, "ai_provider", "zeabur"),
+            "ai_model": getattr(app_settings, "ai_model", "gemini-2.5-flash"),
+            "ai_api_key": getattr(app_settings, "ai_api_key", ""),
             "google_client_id": app_settings.google_client_id or "",
             "google_client_secret": app_settings.google_client_secret or "",
         }
-    
+
     return SettingsResponse(
         google_api_key=mask_key(settings_data.get("google_api_key", "")),
         google_cx_id=mask_key(settings_data.get("google_cx_id", "")),
-        openai_api_key=mask_key(settings_data.get("openai_api_key", "")),
+        ai_provider=settings_data.get("ai_provider", "zeabur"),
+        ai_model=settings_data.get("ai_model", "gemini-2.5-flash"),
+        ai_api_key=mask_key(settings_data.get("ai_api_key", "")),
         google_client_id=mask_key(settings_data.get("google_client_id", "")),
         google_client_secret=mask_key(settings_data.get("google_client_secret", "")),
         has_google_api=bool(settings_data.get("google_api_key")),
-        has_openai_api=bool(settings_data.get("openai_api_key")),
+        has_ai_api=bool(settings_data.get("ai_api_key")),
         has_google_oauth=bool(settings_data.get("google_client_id")),
     )
 
@@ -103,7 +111,9 @@ async def update_settings(
     current = cached or {
         "google_api_key": app_settings.google_api_key or "",
         "google_cx_id": app_settings.google_cx_id or "",
-        "openai_api_key": app_settings.openai_api_key or "",
+        "ai_provider": getattr(app_settings, "ai_provider", "zeabur"),
+        "ai_model": getattr(app_settings, "ai_model", "gemini-2.5-flash"),
+        "ai_api_key": getattr(app_settings, "ai_api_key", ""),
         "google_client_id": app_settings.google_client_id or "",
         "google_client_secret": app_settings.google_client_secret or "",
     }
@@ -179,52 +189,58 @@ async def test_google_search(
         )
 
 
-@router.post("/test/openai", response_model=TestResult)
-async def test_openai(
+@router.post("/test/ai", response_model=TestResult)
+async def test_ai(
     current_user = Depends(get_current_active_user)
 ):
     """
-    Test OpenAI API connection.
+    Test AI Hub connection.
+
+    Note: /api/v1/ai/test-connection is the newer endpoint, but this one is
+    kept for backward compatibility with the frontend Settings page.
     """
-    import httpx
-    
-    # Get settings
+    from app.services.ai_service import AIService
+
+    # Get settings (Redis first, fallback to env)
     cached = await cache_manager.get(SETTINGS_KEY)
     if cached:
-        api_key = cached.get("openai_api_key", "")
+        api_key = cached.get("ai_api_key", "")
+        provider = cached.get("ai_provider", "zeabur")
+        model = cached.get("ai_model", "gemini-2.5-flash")
     else:
-        api_key = app_settings.openai_api_key or ""
-    
+        api_key = getattr(app_settings, "ai_api_key", "")
+        provider = getattr(app_settings, "ai_provider", "zeabur")
+        model = getattr(app_settings, "ai_model", "gemini-2.5-flash")
+
     if not api_key:
         return TestResult(
-            service="OpenAI",
+            service=f"AI Hub ({provider})",
             success=False,
             message="API Key 未設定"
         )
-    
+
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://api.openai.com/v1/models",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=10,
+        success = AIService.test_connection(
+            api_key=api_key,
+            provider=provider,
+            model=model
+        )
+
+        if success:
+            return TestResult(
+                service=f"AI Hub ({provider}/{model})",
+                success=True,
+                message="連線成功！"
             )
-            
-            if response.status_code == 200:
-                return TestResult(
-                    service="OpenAI",
-                    success=True,
-                    message="連線成功！"
-                )
-            else:
-                return TestResult(
-                    service="OpenAI",
-                    success=False,
-                    message=f"API 錯誤: {response.status_code}"
-                )
+        else:
+            return TestResult(
+                service=f"AI Hub ({provider}/{model})",
+                success=False,
+                message="連線失敗，請檢查 API Key"
+            )
     except Exception as e:
         return TestResult(
-            service="OpenAI",
+            service=f"AI Hub ({provider})",
             success=False,
             message=f"連線失敗: {str(e)}"
         )

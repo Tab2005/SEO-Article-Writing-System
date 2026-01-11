@@ -97,6 +97,108 @@ html.dark .page-bg {
   @apply bg-slate-900;
 }
 
+/* Dark mode text improvements for better readability */
+html.dark h1,
+html.dark h2,
+html.dark h3,
+html.dark h4,
+html.dark h5,
+html.dark h6 {
+  @apply text-gray-100;
+}
+
+html.dark p {
+  @apply text-gray-200;
+}
+
+html.dark .text-gray-900 {
+  @apply text-gray-100;
+}
+
+html.dark .text-gray-800 {
+  @apply text-gray-200;
+}
+
+html.dark .text-gray-700 {
+  @apply text-gray-300;
+}
+
+html.dark .text-gray-600 {
+  @apply text-gray-300;
+}
+
+html.dark .text-gray-500 {
+  @apply text-gray-400;
+}
+
+html.dark label {
+  @apply text-gray-200;
+}
+
+/* Dark mode list items */
+html.dark li {
+  @apply text-gray-300;
+}
+
+/* Dark mode border improvements */
+html.dark .border-gray-200 {
+  @apply border-slate-600;
+}
+
+html.dark .border-gray-100 {
+  @apply border-slate-700;
+}
+
+/* Dark mode hover states */
+html.dark .hover\:bg-gray-50:hover {
+  @apply bg-slate-700;
+}
+
+html.dark .bg-gray-50 {
+  @apply bg-slate-800;
+}
+
+html.dark .bg-gray-100 {
+  @apply bg-slate-700;
+}
+
+/* Dark mode accent backgrounds */
+html.dark .bg-blue-50 {
+  @apply bg-blue-900/30;
+}
+
+html.dark .bg-green-50 {
+  @apply bg-green-900/30;
+}
+
+html.dark .bg-purple-50 {
+  @apply bg-purple-900/30;
+}
+
+html.dark .bg-red-50 {
+  @apply bg-red-900/30;
+}
+
+html.dark .bg-orange-50 {
+  @apply bg-orange-900/30;
+}
+
+html.dark .bg-primary-50 {
+  @apply bg-primary-900/30;
+}
+
+html.dark .text-primary-700 {
+  @apply text-primary-400;
+}
+
+html.dark .text-primary-800 {
+  @apply text-primary-300;
+}
+
+html.dark .bg-primary-100 {
+  @apply bg-primary-900/40;
+}
+
 /* Google login button styles */
 .google-btn {
   display: flex;

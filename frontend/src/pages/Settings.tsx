@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
-    Settings as SettingsIcon, Save, TestTube, CheckCircle2,
-    XCircle, Loader2, Eye, EyeOff, Key, Globe, Bot
+    Save, TestTube, CheckCircle2,
+    XCircle, Loader2, Eye, EyeOff, Key, Globe, Cpu
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
@@ -9,11 +9,13 @@ import { useAuthStore } from '../store/authStore'
 interface SettingsData {
     google_api_key: string
     google_cx_id: string
-    openai_api_key: string
+    ai_provider: string
+    ai_model: string
+    ai_api_key: string
     google_client_id: string
     google_client_secret: string
     has_google_api: boolean
-    has_openai_api: boolean
+    has_ai_api: boolean
     has_google_oauth: boolean
 }
 
@@ -21,6 +23,18 @@ interface TestResult {
     service: string
     success: boolean
     message: string
+}
+
+interface AIProvider {
+    name: string
+    description: string
+    requires_sdk: boolean
+}
+
+interface AIModel {
+    description: string
+    provider: string
+    max_tokens?: number
 }
 
 function Settings() {
@@ -34,29 +48,43 @@ function Settings() {
     // Form fields
     const [googleApiKey, setGoogleApiKey] = useState('')
     const [googleCxId, setGoogleCxId] = useState('')
-    const [openaiApiKey, setOpenaiApiKey] = useState('')
+    const [aiProvider, setAiProvider] = useState('zeabur')
+    const [aiModel, setAiModel] = useState('gemini-2.5-flash')
+    const [aiApiKey, setAiApiKey] = useState('')
     const [googleClientId, setGoogleClientId] = useState('')
     const [googleClientSecret, setGoogleClientSecret] = useState('')
 
+    // AI Hub related
+    const [providers, setProviders] = useState<Record<string, AIProvider>>({})
+    const [models, setModels] = useState<Record<string, AIModel>>({})
+
     // Show/hide toggles
     const [showGoogleKey, setShowGoogleKey] = useState(false)
-    const [showOpenaiKey, setShowOpenaiKey] = useState(false)
+    const [showAiKey, setShowAiKey] = useState(false)
     const [showOAuthSecret, setShowOAuthSecret] = useState(false)
 
     // Test results
     const [testingGoogle, setTestingGoogle] = useState(false)
-    const [testingOpenai, setTestingOpenai] = useState(false)
+    const [testingAi, setTestingAi] = useState(false)
     const [googleTestResult, setGoogleTestResult] = useState<TestResult | null>(null)
-    const [openaiTestResult, setOpenaiTestResult] = useState<TestResult | null>(null)
+    const [aiTestResult, setAiTestResult] = useState<TestResult | null>(null)
 
     // Fetch current settings
     useEffect(() => {
         if (isAuthenticated) {
             fetchSettings()
+            fetchProviders()
         } else {
             setLoading(false)
         }
     }, [isAuthenticated])
+
+    // Fetch models when provider changes
+    useEffect(() => {
+        if (aiProvider && isAuthenticated) {
+            fetchModels(aiProvider)
+        }
+    }, [aiProvider, isAuthenticated])
 
     const fetchSettings = async () => {
         if (!isAuthenticated) {
@@ -68,6 +96,8 @@ function Settings() {
         try {
             const response = await api.get<SettingsData>('/settings')
             setSettings(response.data)
+            setAiProvider(response.data.ai_provider || 'zeabur')
+            setAiModel(response.data.ai_model || 'gemini-2.5-flash')
         } catch (err: any) {
             if (err.response?.status === 401) {
                 setError('登入已過期，請重新登入')
@@ -76,6 +106,24 @@ function Settings() {
             }
         } finally {
             setLoading(false)
+        }
+    }
+
+    const fetchProviders = async () => {
+        try {
+            const response = await api.get('/ai/providers')
+            setProviders(response.data.providers || {})
+        } catch (err) {
+            console.error('Failed to fetch AI providers:', err)
+        }
+    }
+
+    const fetchModels = async (provider: string) => {
+        try {
+            const response = await api.get(`/ai/models?provider=${provider}`)
+            setModels(response.data.models || {})
+        } catch (err) {
+            console.error('Failed to fetch AI models:', err)
         }
     }
 
@@ -93,7 +141,9 @@ function Settings() {
             await api.put('/settings', {
                 google_api_key: googleApiKey || undefined,
                 google_cx_id: googleCxId || undefined,
-                openai_api_key: openaiApiKey || undefined,
+                ai_provider: aiProvider,
+                ai_model: aiModel,
+                ai_api_key: aiApiKey || undefined,
                 google_client_id: googleClientId || undefined,
                 google_client_secret: googleClientSecret || undefined,
             })
@@ -101,13 +151,94 @@ function Settings() {
             // Clear form fields
             setGoogleApiKey('')
             setGoogleCxId('')
-            setOpenaiApiKey('')
+            setAiApiKey('')
             setGoogleClientId('')
             setGoogleClientSecret('')
 
             // Refresh settings
             await fetchSettings()
             setSuccess('設定已儲存成功！')
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '儲存失敗')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleSaveGoogle = async () => {
+        if (!isAuthenticated) {
+            setError('請先登入才能儲存設定')
+            return
+        }
+
+        setSaving(true)
+        setError(null)
+        setSuccess(null)
+
+        try {
+            await api.put('/settings', {
+                google_api_key: googleApiKey || undefined,
+                google_cx_id: googleCxId || undefined,
+            })
+
+            setGoogleApiKey('')
+            setGoogleCxId('')
+            await fetchSettings()
+            setSuccess('Google Search API 設定已儲存！')
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '儲存失敗')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleSaveAI = async () => {
+        if (!isAuthenticated) {
+            setError('請先登入才能儲存設定')
+            return
+        }
+
+        setSaving(true)
+        setError(null)
+        setSuccess(null)
+
+        try {
+            await api.put('/settings', {
+                ai_provider: aiProvider,
+                ai_model: aiModel,
+                ai_api_key: aiApiKey || undefined,
+            })
+
+            setAiApiKey('')
+            await fetchSettings()
+            setSuccess('AI Hub 設定已儲存！')
+        } catch (err: any) {
+            setError(err.response?.data?.detail || '儲存失敗')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleSaveOAuth = async () => {
+        if (!isAuthenticated) {
+            setError('請先登入才能儲存設定')
+            return
+        }
+
+        setSaving(true)
+        setError(null)
+        setSuccess(null)
+
+        try {
+            await api.put('/settings', {
+                google_client_id: googleClientId || undefined,
+                google_client_secret: googleClientSecret || undefined,
+            })
+
+            setGoogleClientId('')
+            setGoogleClientSecret('')
+            await fetchSettings()
+            setSuccess('Google OAuth 設定已儲存！')
         } catch (err: any) {
             setError(err.response?.data?.detail || '儲存失敗')
         } finally {
@@ -142,30 +273,30 @@ function Settings() {
         }
     }
 
-    const testOpenai = async () => {
+    const testAiHub = async () => {
         if (!isAuthenticated) {
-            setOpenaiTestResult({
-                service: 'OpenAI',
+            setAiTestResult({
+                service: 'AI Hub',
                 success: false,
                 message: '請先登入',
             })
             return
         }
 
-        setTestingOpenai(true)
-        setOpenaiTestResult(null)
+        setTestingAi(true)
+        setAiTestResult(null)
 
         try {
-            const response = await api.post<TestResult>('/settings/test/openai')
-            setOpenaiTestResult(response.data)
+            const response = await api.post<TestResult>('/settings/test/ai')
+            setAiTestResult(response.data)
         } catch (err: any) {
-            setOpenaiTestResult({
-                service: 'OpenAI',
+            setAiTestResult({
+                service: 'AI Hub',
                 success: false,
                 message: '測試請求失敗',
             })
         } finally {
-            setTestingOpenai(false)
+            setTestingAi(false)
         }
     }
 
@@ -173,6 +304,23 @@ function Settings() {
         return (
             <div className="flex items-center justify-center h-64">
                 <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+            </div>
+        )
+    }
+
+    // 未登入時顯示提示
+    if (!isAuthenticated) {
+        return (
+            <div className="space-y-8 max-w-4xl">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">系統設定</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                        設定 API 金鑰以啟用搜尋和內容生成功能
+                    </p>
+                </div>
+                <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400">
+                    請先登入才能訪問系統設定
+                </div>
             </div>
         )
     }
@@ -274,6 +422,19 @@ function Settings() {
                             測試連線
                         </button>
 
+                        <button
+                            onClick={handleSaveGoogle}
+                            disabled={saving || (!googleApiKey && !googleCxId)}
+                            className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
+                        >
+                            {saving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4" />
+                            )}
+                            儲存
+                        </button>
+
                         {googleTestResult && (
                             <span className={`flex items-center gap-1 text-sm ${googleTestResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                                 }`}>
@@ -285,18 +446,18 @@ function Settings() {
                 </div>
             </div>
 
-            {/* OpenAI API */}
+            {/* AI Hub */}
             <div className="card">
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-10 h-10 bg-green-50 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
-                        <Bot className="w-5 h-5 text-green-600 dark:text-green-400" />
+                        <Cpu className="w-5 h-5 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
-                        <h2 className="font-semibold text-gray-900 dark:text-gray-100">OpenAI API</h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">用於 AI 內容生成</p>
+                        <h2 className="font-semibold text-gray-900 dark:text-gray-100">AI Hub</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">統一 AI 服務介面，支援多個提供者和模型</p>
                     </div>
                     <div className="ml-auto">
-                        {settings?.has_openai_api ? (
+                        {settings?.has_ai_api ? (
                             <span className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm">
                                 <CheckCircle2 className="w-4 h-4" /> 已設定
                             </span>
@@ -311,33 +472,76 @@ function Settings() {
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            API Key {settings?.openai_api_key && <span className="text-gray-400">({settings.openai_api_key})</span>}
+                            AI 提供者
+                        </label>
+                        <select
+                            value={aiProvider}
+                            onChange={(e) => setAiProvider(e.target.value)}
+                            className="input"
+                        >
+                            {Object.entries(providers).map(([key, provider]) => (
+                                <option key={key} value={key}>
+                                    {provider.name} - {provider.description}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            選擇 AI 服務提供者
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            AI 模型
+                        </label>
+                        <select
+                            value={aiModel}
+                            onChange={(e) => setAiModel(e.target.value)}
+                            className="input"
+                        >
+                            {Object.entries(models).map(([key, model]) => (
+                                <option key={key} value={key}>
+                                    {key} - {model.description}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            選擇要使用的 AI 模型
+                        </p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            API Key {settings?.ai_api_key && <span className="text-gray-400">({settings.ai_api_key})</span>}
                         </label>
                         <div className="relative">
                             <input
-                                type={showOpenaiKey ? 'text' : 'password'}
-                                value={openaiApiKey}
-                                onChange={(e) => setOpenaiApiKey(e.target.value)}
-                                placeholder="輸入新的 API Key (sk-...)..."
+                                type={showAiKey ? 'text' : 'password'}
+                                value={aiApiKey}
+                                onChange={(e) => setAiApiKey(e.target.value)}
+                                placeholder="輸入新的 API Key..."
                                 className="input pr-10"
                             />
                             <button
                                 type="button"
-                                onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                                onClick={() => setShowAiKey(!showAiKey)}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                             >
-                                {showOpenaiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                {showAiKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                             </button>
                         </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {aiProvider === 'zeabur' ? 'Zeabur AI Hub API Key (格式: sk-...)' : 'Google AI Studio API Key'}
+                        </p>
                     </div>
 
                     <div className="flex items-center gap-3">
                         <button
-                            onClick={testOpenai}
-                            disabled={testingOpenai}
+                            onClick={testAiHub}
+                            disabled={testingAi}
                             className="btn-secondary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
                         >
-                            {testingOpenai ? (
+                            {testingAi ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                                 <TestTube className="w-4 h-4" />
@@ -345,11 +549,24 @@ function Settings() {
                             測試連線
                         </button>
 
-                        {openaiTestResult && (
-                            <span className={`flex items-center gap-1 text-sm ${openaiTestResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        <button
+                            onClick={handleSaveAI}
+                            disabled={saving || !aiApiKey}
+                            className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
+                        >
+                            {saving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4" />
+                            )}
+                            儲存
+                        </button>
+
+                        {aiTestResult && (
+                            <span className={`flex items-center gap-1 text-sm ${aiTestResult.success ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                                 }`}>
-                                {openaiTestResult.success ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
-                                {openaiTestResult.message}
+                                {aiTestResult.success ? <CheckCircle2 className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                                {aiTestResult.message}
                             </span>
                         )}
                     </div>
@@ -414,24 +631,25 @@ function Settings() {
                             </button>
                         </div>
                     </div>
+
+                    <div className="flex justify-end pt-2">
+                        <button
+                            onClick={handleSaveOAuth}
+                            disabled={saving || (!googleClientId && !googleClientSecret)}
+                            className="btn-primary flex items-center gap-2 text-sm py-2 disabled:opacity-50"
+                        >
+                            {saving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4" />
+                            )}
+                            儲存
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            {/* Save Button */}
-            <div className="flex justify-end">
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="btn-primary flex items-center gap-2 disabled:opacity-50"
-                >
-                    {saving ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                        <Save className="w-5 h-5" />
-                    )}
-                    儲存設定
-                </button>
-            </div>
+            {/* Removed global Save Button - each section now has its own */}
         </div>
     )
 }

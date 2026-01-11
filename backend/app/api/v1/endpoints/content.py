@@ -26,6 +26,7 @@ class OutlineRequest(BaseModel):
     """Request schema for outline generation."""
     topic: str = Field(..., min_length=1, max_length=500)
     target_keyword: str = Field(..., min_length=1, max_length=255)
+    secondary_keywords: List[str] = Field(default=[], max_length=10)
     word_count_target: int = Field(default=2000, ge=500, le=10000)
     tone: str = Field(default="professional")
     use_competitor_analysis: bool = Field(default=True)
@@ -36,6 +37,7 @@ class ContentRequest(BaseModel):
     """Request schema for full content generation."""
     topic: str = Field(..., min_length=1, max_length=500)
     target_keyword: str = Field(..., min_length=1, max_length=255)
+    secondary_keywords: List[str] = Field(default=[], max_length=10)
     word_count_target: int = Field(default=2000, ge=500, le=10000)
     tone: str = Field(default="professional")
     market: str = Field(default="tw")
@@ -81,6 +83,7 @@ async def generate_outline(request: OutlineRequest):
     outline = await llm_service.generate_outline(
         topic=request.topic,
         target_keyword=request.target_keyword,
+        secondary_keywords=request.secondary_keywords,
         competitor_h2s=competitor_h2s,
         word_count_target=request.word_count_target,
         tone=request.tone,
@@ -115,6 +118,7 @@ async def generate_content(request: ContentRequest):
     outline = await llm_service.generate_outline(
         topic=request.topic,
         target_keyword=request.target_keyword,
+        secondary_keywords=request.secondary_keywords,
         competitor_h2s=competitor_h2s,
         word_count_target=request.word_count_target,
         tone=request.tone,
@@ -124,6 +128,7 @@ async def generate_content(request: ContentRequest):
     content = await llm_service.generate_full_article(
         outline=outline,
         target_keyword=request.target_keyword,
+        secondary_keywords=request.secondary_keywords,
     )
     
     return {
@@ -131,6 +136,7 @@ async def generate_content(request: ContentRequest):
         "content": content,
         "word_count": len(content),
         "target_keyword": request.target_keyword,
+        "secondary_keywords": request.secondary_keywords,
     }
 
 
