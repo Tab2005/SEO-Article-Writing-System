@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.article import Article, ArticleStatus
 from app.models.search_cache import SearchCache
+from app.models.research_job import ResearchJob, ResearchCompetitor, ResearchArtifact
 
 __all__ = [
     "User",
@@ -15,4 +16,7 @@ __all__ = [
     "Article",
     "ArticleStatus",
     "SearchCache",
+    "ResearchJob",
+    "ResearchCompetitor",
+    "ResearchArtifact",
 ]

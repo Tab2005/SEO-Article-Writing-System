@@ -117,6 +117,20 @@ async def get_current_user(
     return user
 
 
+async def get_optional_current_user(
+    db: AsyncSession = Depends(get_db),
+    token: Optional[str] = Depends(oauth2_scheme),
+) -> Optional[User]:
+    """Return current user if token is present and valid, else None."""
+    if not token:
+        return None
+    try:
+        return await get_current_user(db=db, token=token)
+    except HTTPException:
+        # Token is invalid/expired, treat as unauthenticated
+        return None
+
+
 async def get_current_active_user(
     current_user: User = Depends(get_current_user),
 ) -> User:

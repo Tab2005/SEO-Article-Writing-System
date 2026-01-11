@@ -23,20 +23,20 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events.
     """
     # Startup
-    print(f"🚀 Starting {settings.app_name}...")
-    print(f"📁 Database: {settings.database_url}")
+    print(f"Starting {settings.app_name}...")
+    print(f"Database: {settings.database_url}")
     
     # Initialize database tables
     try:
         await init_db()
-        print("✅ Database tables initialized")
+        print("Database tables initialized")
     except Exception as e:
-        print(f"⚠️ Database init warning: {e}")
+        print(f"Database init warning: {e}")
     
     yield
     
     # Shutdown
-    print(f"👋 Shutting down {settings.app_name}...")
+    print(f"Shutting down {settings.app_name}...")
     await close_db()
 
 

@@ -10,8 +10,10 @@ import uuid
 from fastapi import APIRouter, status, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.database import get_db
+from app.models.research_job import ResearchArtifact
 from app.schemas.article import (
     ArticleOutline,
     ArticleGenerateRequest,
@@ -31,6 +33,7 @@ class OutlineRequest(BaseModel):
     tone: str = Field(default="professional")
     use_competitor_analysis: bool = Field(default=True)
     market: str = Field(default="tw")
+    research_job_id: Optional[uuid.UUID] = None
 
 
 class ContentRequest(BaseModel):
@@ -41,6 +44,7 @@ class ContentRequest(BaseModel):
     word_count_target: int = Field(default=2000, ge=500, le=10000)
     tone: str = Field(default="professional")
     market: str = Field(default="tw")
+    research_job_id: Optional[uuid.UUID] = None
 
 
 class ContentOptimizeRequest(BaseModel):
@@ -50,7 +54,7 @@ class ContentOptimizeRequest(BaseModel):
 
 
 @router.post("/outline", status_code=status.HTTP_201_CREATED, response_model=ArticleOutline)
-async def generate_outline(request: OutlineRequest):
+async def generate_outline(request: OutlineRequest, db: AsyncSession = Depends(get_db)):
     """
     Generate article outline.
     
@@ -59,7 +63,24 @@ async def generate_outline(request: OutlineRequest):
     """
     competitor_h2s = None
     
-    if request.use_competitor_analysis:
+    if request.research_job_id:
+        try:
+            result = await db.execute(
+                select(ResearchArtifact)
+                .where(
+                    ResearchArtifact.job_id == request.research_job_id,
+                    ResearchArtifact.type == "analysis_report",
+                )
+                .order_by(ResearchArtifact.created_at.desc())
+                .limit(1)
+            )
+            artifact = result.scalar_one_or_none()
+            if artifact:
+                competitor_h2s = (artifact.payload or {}).get("common_h2_tags")
+        except Exception:
+            competitor_h2s = None
+
+    if request.use_competitor_analysis and not competitor_h2s:
         try:
             # Get SERP results
             serp = await google_search_service.search(
@@ -93,7 +114,7 @@ async def generate_outline(request: OutlineRequest):
 
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
-async def generate_content(request: ContentRequest):
+async def generate_content(request: ContentRequest, db: AsyncSession = Depends(get_db)):
     """
     Generate full article content.
     
@@ -102,17 +123,35 @@ async def generate_content(request: ContentRequest):
     """
     # Step 1: Get competitor insights
     competitor_h2s = None
-    try:
-        serp = await google_search_service.search(
-            keyword=request.target_keyword,
-            market=request.market,
-            num_results=5,
-        )
-        urls = [r.url for r in serp.results]
-        competitors = await crawler_service.crawl_pages(urls)
-        competitor_h2s = analysis_service.extract_common_headings(competitors, "h2", 10)
-    except Exception:
-        pass
+    if request.research_job_id:
+        try:
+            result = await db.execute(
+                select(ResearchArtifact)
+                .where(
+                    ResearchArtifact.job_id == request.research_job_id,
+                    ResearchArtifact.type == "analysis_report",
+                )
+                .order_by(ResearchArtifact.created_at.desc())
+                .limit(1)
+            )
+            artifact = result.scalar_one_or_none()
+            if artifact:
+                competitor_h2s = (artifact.payload or {}).get("common_h2_tags")
+        except Exception:
+            competitor_h2s = None
+
+    if not competitor_h2s:
+        try:
+            serp = await google_search_service.search(
+                keyword=request.target_keyword,
+                market=request.market,
+                num_results=5,
+            )
+            urls = [r.url for r in serp.results]
+            competitors = await crawler_service.crawl_pages(urls)
+            competitor_h2s = analysis_service.extract_common_headings(competitors, "h2", 10)
+        except Exception:
+            pass
     
     # Step 2: Generate outline
     outline = await llm_service.generate_outline(

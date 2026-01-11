@@ -209,6 +209,8 @@ class AnalysisService:
         keyword: str,
         market: str,
         competitors: List[CompetitorData],
+        *,
+        enable_tfidf: bool = True,
     ) -> AnalysisReport:
         """
         Generate comprehensive analysis report.
@@ -226,8 +228,24 @@ class AnalysisService:
         common_h3 = self.extract_common_headings(competitors, "h3", 10)
         keyword_freq = self.calculate_keyword_frequency(competitors, keyword)
         
-        # TF-IDF 關鍵詞分析
-        tfidf_analysis = self.extract_tfidf_keywords(competitors, keyword)
+        # TF-IDF 關鍵詞分析（可使用 competitor.content_text）
+        tfidf_analysis = self.extract_tfidf_keywords(competitors, keyword) if enable_tfidf else None
+
+        # Avoid returning full page content in API payload by default
+        sanitized_competitors = [
+            CompetitorData(
+                rank=c.rank,
+                url=c.url,
+                title=c.title,
+                word_count=c.word_count,
+                headings=c.headings,
+                meta_description=c.meta_description,
+                meta_keywords=c.meta_keywords,
+                content_text=None,
+                scraped_at=c.scraped_at,
+            )
+            for c in competitors
+        ]
         
         return AnalysisReport(
             keyword=keyword,
@@ -240,7 +258,7 @@ class AnalysisService:
             keyword_frequency=keyword_freq,
             tfidf_analysis=tfidf_analysis,
             competitor_count=len(competitors),
-            competitors=competitors,
+            competitors=sanitized_competitors,
             generated_at=datetime.now(timezone.utc),
         )
 

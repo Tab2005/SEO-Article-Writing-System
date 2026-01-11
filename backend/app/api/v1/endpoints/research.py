@@ -6,21 +6,263 @@ Handles keyword research and SERP analysis.
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional, List
 
 from fastapi import APIRouter, status, Depends, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.database import get_db
+from app.api.dependencies import get_optional_current_user
+from app.models.user import User
+from app.models.research_job import ResearchJob, ResearchCompetitor
 from app.schemas.research import (
     KeywordResearchRequest,
     SerpResponse,
     AnalysisReport,
     ResearchTaskCreate,
     ResearchTaskStatus,
+    ResearchJobCreateRequest,
+    ResearchJobResponse,
+    ResearchCompetitorSummary,
+    ResearchCompetitorContent,
 )
 from app.services import google_search_service, crawler_service, analysis_service
+from app.services.research_job_service import create_job as create_research_job
+from app.services.research_job_service import get_latest_artifact
 
 router = APIRouter()
+
+
+def _job_to_response(job: ResearchJob) -> ResearchJobResponse:
+    return ResearchJobResponse(
+        job_id=job.id,
+        keyword=job.keyword,
+        market=job.market,
+        depth=job.depth,
+        status=job.status,
+        progress=job.progress,
+        message=job.message,
+        error=job.error,
+        created_at=job.created_at,
+        started_at=job.started_at,
+        completed_at=job.completed_at,
+    )
+
+
+def _ensure_job_access(job: ResearchJob, user: Optional[User]) -> None:
+    # If job is not bound to a user, allow access
+    if job.user_id is None:
+        return
+    # If job is bound, require user
+    if user is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Authentication required")
+    # DevUser compatibility (has is_superuser)
+    if getattr(user, "is_superuser", False):
+        return
+    if getattr(user, "id", None) != job.user_id:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not allowed")
+
+
+@router.post("/jobs", status_code=status.HTTP_202_ACCEPTED, response_model=ResearchJobResponse)
+async def create_job_endpoint(
+    request: ResearchJobCreateRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    """Create a persistent research job and enqueue background execution."""
+    user_id = getattr(current_user, "id", None) if current_user else None
+    job = await create_research_job(
+        db,
+        keyword=request.keyword,
+        market=request.market,
+        depth=request.depth,
+        user_id=user_id,
+    )
+
+    # Try Celery; fallback to FastAPI BackgroundTasks (dev mode)
+    try:
+        from app.tasks.research_tasks import run_research_job_task
+
+        run_research_job_task.delay(str(job.id))
+        job.message = "Queued in Celery"
+    except Exception as e:
+        from app.tasks.research_tasks import run_research_job
+
+        job.message = f"Queued in API process (Celery unavailable): {e}"
+        background_tasks.add_task(run_research_job, str(job.id))
+
+    await db.commit()
+    await db.refresh(job)
+    return _job_to_response(job)
+
+
+@router.get("/jobs", response_model=List[ResearchJobResponse])
+async def list_jobs_endpoint(
+    limit: int = 20,
+    offset: int = 0,
+    keyword: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    """List research jobs with optional filtering.
+    
+    For authenticated users, returns only their jobs.
+    For anonymous users, returns jobs without user_id.
+    """
+    query = select(ResearchJob).order_by(ResearchJob.created_at.desc())
+    
+    # Filter by user ownership
+    if current_user:
+        user_id = getattr(current_user, "id", None)
+        if user_id and not getattr(current_user, "is_superuser", False):
+            query = query.where(ResearchJob.user_id == user_id)
+    else:
+        # Anonymous: only show jobs without user_id
+        query = query.where(ResearchJob.user_id.is_(None))
+    
+    # Optional keyword filter
+    if keyword:
+        query = query.where(ResearchJob.keyword.ilike(f"%{keyword}%"))
+    
+    # Optional status filter
+    if status_filter:
+        query = query.where(ResearchJob.status == status_filter)
+    
+    query = query.limit(limit).offset(offset)
+    result = await db.execute(query)
+    jobs = result.scalars().all()
+    
+    return [_job_to_response(job) for job in jobs]
+
+
+@router.delete("/jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_job_endpoint(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    """Delete a research job and all its associated data."""
+    job = await db.get(ResearchJob, job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_job_access(job, current_user)
+    
+    await db.delete(job)
+    await db.commit()
+    return None
+
+
+@router.get("/jobs/{job_id}", response_model=ResearchJobResponse)
+async def get_job_endpoint(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    job = await db.get(ResearchJob, job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_job_access(job, current_user)
+    return _job_to_response(job)
+
+
+@router.get("/jobs/{job_id}/report", response_model=AnalysisReport)
+async def get_job_report_endpoint(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    job = await db.get(ResearchJob, job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_job_access(job, current_user)
+
+    artifact = await get_latest_artifact(db, job_id=job_id, artifact_type="analysis_report")
+    if artifact is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Report not available")
+
+    return AnalysisReport.model_validate(artifact.payload)
+
+
+@router.get("/jobs/{job_id}/competitors", response_model=List[ResearchCompetitorSummary])
+async def list_job_competitors_endpoint(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    job = await db.get(ResearchJob, job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_job_access(job, current_user)
+
+    result = await db.execute(
+        select(ResearchCompetitor)
+        .where(ResearchCompetitor.job_id == job_id)
+        .order_by(ResearchCompetitor.rank.asc())
+    )
+    rows = result.scalars().all()
+    return [
+        ResearchCompetitorSummary(
+            rank=r.rank,
+            url=r.url,
+            serp_title=r.serp_title,
+            snippet=r.snippet,
+            fetch_status=r.fetch_status,
+            http_status=r.http_status,
+            error=r.error,
+            page_title=r.page_title,
+            meta_description=r.meta_description,
+            word_count=r.word_count,
+            scraped_at=r.scraped_at,
+            has_content=bool(r.content_text),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/jobs/{job_id}/competitors/{rank}/content", response_model=ResearchCompetitorContent)
+async def get_job_competitor_content_endpoint(
+    job_id: uuid.UUID,
+    rank: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user),
+):
+    job = await db.get(ResearchJob, job_id)
+    if job is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    _ensure_job_access(job, current_user)
+
+    result = await db.execute(
+        select(ResearchCompetitor).where(
+            ResearchCompetitor.job_id == job_id,
+            ResearchCompetitor.rank == rank,
+        )
+    )
+    competitor = result.scalar_one_or_none()
+    if competitor is None:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Competitor not found")
+    if not competitor.content_text:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Content not available")
+
+    return ResearchCompetitorContent(
+        rank=competitor.rank,
+        url=competitor.url,
+        page_title=competitor.page_title,
+        content_text=competitor.content_text,
+        scraped_at=competitor.scraped_at,
+    )
 
 
 @router.post("/keyword", status_code=status.HTTP_202_ACCEPTED, response_model=ResearchTaskCreate)

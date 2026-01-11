@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Search, Loader2, Globe, FileText, BarChart3, ExternalLink, ChevronDown, ChevronUp, AlertCircle, Hash, Heading1, Clock, Sparkles, Tags, TrendingUp } from 'lucide-react'
-import { researchService, AnalysisReport, CompetitorData, TopicTheme } from '../services/research.service'
+import { useEffect, useState } from 'react'
+import { Search, Loader2, Globe, FileText, BarChart3, ExternalLink, ChevronDown, ChevronUp, AlertCircle, Hash, Heading1, Clock, Sparkles, Tags, TrendingUp, History, Trash2, Eye } from 'lucide-react'
+import { researchService, AnalysisReport, CompetitorData, TopicTheme, ResearchJob } from '../services/research.service'
 
 function Research() {
     const [keyword, setKeyword] = useState('')
@@ -10,9 +10,74 @@ function Research() {
     const [error, setError] = useState<string | null>(null)
     const [expandedCompetitor, setExpandedCompetitor] = useState<number | null>(null)
 
+    const [job, setJob] = useState<ResearchJob | null>(null)
+
     // Topic themes state
     const [isAnalyzingThemes, setIsAnalyzingThemes] = useState(false)
     const [topicThemes, setTopicThemes] = useState<TopicTheme[]>([])
+
+    // Job history state
+    const [showHistory, setShowHistory] = useState(false)
+    const [jobHistory, setJobHistory] = useState<ResearchJob[]>([])
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+
+    // Load job history
+    const loadJobHistory = async () => {
+        setIsLoadingHistory(true)
+        try {
+            const jobs = await researchService.listJobs({ limit: 20 })
+            setJobHistory(jobs)
+        } catch (err) {
+            console.error('Failed to load job history:', err)
+        } finally {
+            setIsLoadingHistory(false)
+        }
+    }
+
+    // Load history on mount and when showHistory changes
+    useEffect(() => {
+        if (showHistory) {
+            loadJobHistory()
+        }
+    }, [showHistory])
+
+    // Load a previous job's results
+    const loadPreviousJob = async (jobId: string) => {
+        setIsLoading(true)
+        setError(null)
+        setResults(null)
+        setTopicThemes([])
+        try {
+            const jobData = await researchService.getJob(jobId)
+            setJob(jobData)
+            setKeyword(jobData.keyword)
+            setMarket(jobData.market)
+            
+            if (jobData.status === 'completed' || jobData.status === 'partial') {
+                const report = await researchService.getJobReport(jobId)
+                setResults(report)
+            } else if (jobData.status === 'failed') {
+                setError(jobData.error || jobData.message || '此任務執行失敗')
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.detail || err.message || '載入失敗')
+        } finally {
+            setIsLoading(false)
+            setShowHistory(false)
+        }
+    }
+
+    // Delete a job
+    const deleteJob = async (jobId: string, e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (!confirm('確定要刪除此任務嗎？')) return
+        try {
+            await researchService.deleteJob(jobId)
+            setJobHistory(prev => prev.filter(j => j.job_id !== jobId))
+        } catch (err) {
+            console.error('Failed to delete job:', err)
+        }
+    }
 
     const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -21,18 +86,67 @@ function Research() {
         setIsLoading(true)
         setError(null)
         setResults(null)
+        setJob(null)
         setTopicThemes([])  // Reset themes on new search
 
         try {
-            const data = await researchService.analyzeKeyword(keyword.trim(), market, 10)
-            setResults(data)
+            const created = await researchService.createJob(keyword.trim(), market, 10)
+            setJob(created)
+            // results will be loaded once the job is completed
+            // Refresh history after creating new job
+            loadJobHistory()
         } catch (err: any) {
             const message = err.response?.data?.detail || err.message || '分析失敗，請稍後再試'
             setError(message)
-        } finally {
             setIsLoading(false)
+        } finally {
+            // keep loading state until job completes (handled by polling)
         }
     }
+
+    // Poll job status until completed/failed
+    useEffect(() => {
+        if (!job?.job_id) return
+
+        let cancelled = false
+        let timer: any
+
+        const poll = async () => {
+            try {
+                const latest = await researchService.getJob(job.job_id)
+                if (cancelled) return
+                setJob(latest)
+
+                if (latest.status === 'completed' || latest.status === 'partial') {
+                    const report = await researchService.getJobReport(latest.job_id)
+                    if (cancelled) return
+                    setResults(report)
+                    setIsLoading(false)
+                    clearInterval(timer)
+                }
+
+                if (latest.status === 'failed') {
+                    setIsLoading(false)
+                    setError(latest.error || latest.message || '分析失敗，請稍後再試')
+                    clearInterval(timer)
+                }
+            } catch (e: any) {
+                if (cancelled) return
+                setIsLoading(false)
+                setError(e.response?.data?.detail || e.message || '分析失敗，請稍後再試')
+                clearInterval(timer)
+            }
+        }
+
+        // immediate poll then interval
+        poll()
+        timer = setInterval(poll, 2000)
+
+        return () => {
+            cancelled = true
+            clearInterval(timer)
+        }
+    }, [job?.job_id])
 
     const handleAnalyzeThemes = async () => {
         if (!results) return
@@ -57,18 +171,116 @@ function Research() {
     return (
         <div className="space-y-8">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">關鍵字研究</h1>
-                <p className="text-gray-600 mt-1">
-                    輸入關鍵字以分析競爭對手和 SERP 結果
-                </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">關鍵字研究</h1>
+                    <p className="text-gray-600 dark:text-gray-400 mt-1">
+                        輸入關鍵字以分析競爭對手和 SERP 結果
+                    </p>
+                </div>
+                <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                    <History className="w-4 h-4" />
+                    {showHistory ? '隱藏歷史' : '查看歷史'}
+                </button>
             </div>
+
+            {/* Job History Panel */}
+            {showHistory && (
+                <div className="card">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                            <History className="w-5 h-5" />
+                            研究任務歷史
+                        </h3>
+                        <button
+                            onClick={loadJobHistory}
+                            disabled={isLoadingHistory}
+                            className="text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                        >
+                            {isLoadingHistory ? '載入中...' : '重新整理'}
+                        </button>
+                    </div>
+                    
+                    {isLoadingHistory ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                        </div>
+                    ) : jobHistory.length === 0 ? (
+                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+                            尚無研究任務記錄
+                        </p>
+                    ) : (
+                        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                            {jobHistory.map((historyJob) => (
+                                <div
+                                    key={historyJob.job_id}
+                                    className="py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800/50 -mx-4 px-4 cursor-pointer transition-colors"
+                                    onClick={() => loadPreviousJob(historyJob.job_id)}
+                                >
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-gray-900 dark:text-white truncate">
+                                                {historyJob.keyword}
+                                            </span>
+                                            <span className={`px-2 py-0.5 text-xs rounded-full ${
+                                                historyJob.status === 'completed' 
+                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                                                    : historyJob.status === 'failed'
+                                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                    : historyJob.status === 'running'
+                                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                                                    : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
+                                            }`}>
+                                                {historyJob.status === 'completed' ? '完成' 
+                                                    : historyJob.status === 'failed' ? '失敗'
+                                                    : historyJob.status === 'running' ? '執行中'
+                                                    : historyJob.status === 'partial' ? '部分完成'
+                                                    : '等待中'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                            <span className="capitalize">{historyJob.market}</span>
+                                            {' · '}
+                                            {new Date(historyJob.created_at).toLocaleString('zh-TW')}
+                                            {historyJob.status === 'completed' && historyJob.completed_at && (
+                                                <> · 耗時 {Math.round((new Date(historyJob.completed_at).getTime() - new Date(historyJob.created_at).getTime()) / 1000)}秒</>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 ml-4">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                loadPreviousJob(historyJob.job_id)
+                                            }}
+                                            className="p-2 text-gray-500 hover:text-primary-600 dark:text-gray-400 dark:hover:text-primary-400"
+                                            title="查看結果"
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={(e) => deleteJob(historyJob.job_id, e)}
+                                            className="p-2 text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400"
+                                            title="刪除任務"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Search Form */}
             <form onSubmit={handleSearch} className="card">
                 <div className="flex flex-col md:flex-row gap-4">
                     <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             目標關鍵字
                         </label>
                         <div className="relative">
@@ -139,7 +351,20 @@ function Research() {
                 <div className="card flex flex-col items-center justify-center py-16">
                     <Loader2 className="w-12 h-12 text-primary-600 animate-spin mb-4" />
                     <p className="text-lg font-medium text-gray-900">正在分析競爭對手...</p>
-                    <p className="text-gray-500 text-sm mt-2">這可能需要 30 秒到 1 分鐘</p>
+                    <p className="text-gray-500 text-sm mt-2">
+                        {job?.message ? job.message : '這可能需要 30 秒到 1 分鐘'}
+                    </p>
+                    {typeof job?.progress === 'number' && (
+                        <div className="w-full max-w-md mt-6">
+                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                    className="h-2 bg-primary-600 rounded-full transition-all"
+                                    style={{ width: `${Math.min(100, Math.max(0, job.progress))}%` }}
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500 mt-2 text-center">{job.progress}%</p>
+                        </div>
+                    )}
                 </div>
             )}
 

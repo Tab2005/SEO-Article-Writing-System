@@ -15,7 +15,7 @@ from alembic import context
 
 # Import models to ensure they are registered
 from app.core.database import Base, get_async_database_url
-from app.models import User, Project, Article, SearchCache
+from app.models import User, Project, Article, SearchCache, ResearchJob, ResearchCompetitor, ResearchArtifact
 from app.config import settings
 
 # Alembic Config object

@@ -148,6 +148,9 @@ class CrawlerService:
             # Extract data
             title = soup.title.string if soup.title else ""
             text = self._extract_text(soup)
+            # Prevent unbounded payload size
+            if len(text) > 200_000:
+                text = text[:200_000]
             word_count = self._count_words(text)
             headings = self._extract_headings(soup)
             meta = self._extract_meta(soup)
@@ -160,6 +163,7 @@ class CrawlerService:
                 headings=headings,
                 meta_description=meta.get("description"),
                 meta_keywords=meta.get("keywords"),
+                content_text=text,
                 scraped_at=datetime.now(timezone.utc),
             )
             

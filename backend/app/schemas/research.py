@@ -67,6 +67,7 @@ class CompetitorData(BaseModel):
     headings: HeadingStructure
     meta_description: Optional[str] = None
     meta_keywords: Optional[str] = None
+    content_text: Optional[str] = None
     scraped_at: datetime
 
 
@@ -145,3 +146,50 @@ class ResearchTaskCreate(BaseModel):
     market: str
     status: str = "pending"
     message: str = "Research task created"
+
+
+# ===== Job-based Research (Persistent) Schemas =====
+
+class ResearchJobCreateRequest(BaseModel):
+    """Create a persistent research job (async)."""
+    keyword: str = Field(..., min_length=1, max_length=200)
+    market: str = Field(default="tw", max_length=10)
+    depth: int = Field(default=10, ge=1, le=50)
+
+
+class ResearchJobResponse(BaseModel):
+    """Research job status/metadata."""
+    job_id: uuid.UUID
+    keyword: str
+    market: str
+    depth: int
+    status: str
+    progress: int = Field(..., ge=0, le=100)
+    message: Optional[str] = None
+    error: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+
+class ResearchCompetitorSummary(BaseModel):
+    rank: int
+    url: str
+    serp_title: Optional[str] = None
+    snippet: Optional[str] = None
+    fetch_status: str
+    http_status: Optional[int] = None
+    error: Optional[str] = None
+    page_title: Optional[str] = None
+    meta_description: Optional[str] = None
+    word_count: Optional[int] = None
+    scraped_at: Optional[datetime] = None
+    has_content: bool = False
+
+
+class ResearchCompetitorContent(BaseModel):
+    rank: int
+    url: str
+    page_title: Optional[str] = None
+    content_text: str
+    scraped_at: Optional[datetime] = None

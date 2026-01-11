@@ -301,6 +301,9 @@ class TFIDFService:
         
         # 收集所有競品的文本內容
         all_texts = []
+
+        # Prevent extremely large documents from making jieba/TextRank/N-gram analysis too slow.
+        max_content_chars = 10_000
         
         for comp in competitors:
             texts = [comp.title]
@@ -309,15 +312,21 @@ class TFIDFService:
             texts.extend(comp.headings.h1)
             texts.extend(comp.headings.h2)
             texts.extend(comp.headings.h3)
+            if getattr(comp, "content_text", None):
+                texts.append(comp.content_text[:max_content_chars])
             all_texts.append(" ".join(texts))
-        
-        combined_text = " ".join(all_texts)
+
+        # Cap total text to keep jieba/TextRank performance predictable
+        combined_text = " ".join(all_texts)[:50_000]
+
+        # For expensive multi-doc operations, use shorter per-doc excerpts
+        docs_for_heavy_ops = [t[:8_000] for t in all_texts]
         target_lower = target_keyword.lower()
         
         # ===== 1. 高頻核心詞（TF-IDF + TextRank）=====
         tfidf_keywords = self.extract_keywords_tfidf(combined_text, top_n=top_n)
         textrank_keywords = self.extract_keywords_textrank(combined_text, top_n=top_n)
-        multi_doc_keywords = self.extract_multi_doc_tfidf(all_texts, top_n=top_n)
+        multi_doc_keywords = self.extract_multi_doc_tfidf(docs_for_heavy_ops, top_n=top_n)
         
         high_freq_scores: Dict[str, float] = {}
         for word, score in tfidf_keywords:
@@ -337,7 +346,7 @@ class TFIDFService:
         
         # ===== 2. 語意相關詞（共現分析）=====
         cooccurrence_terms = self.extract_cooccurrence_terms(
-            all_texts, target_keyword, window_size=10, top_n=top_n
+            docs_for_heavy_ops, target_keyword, window_size=10, top_n=top_n
         )
         
         semantic_related = [
@@ -347,7 +356,7 @@ class TFIDFService:
         ][:15]
         
         # ===== 3. 長尾關鍵詞（N-gram）=====
-        ngram_phrases = self.extract_ngram_phrases(all_texts, min_n=2, max_n=4, top_n=top_n)
+        ngram_phrases = self.extract_ngram_phrases(docs_for_heavy_ops, min_n=2, max_n=4, top_n=top_n)
         
         long_tail = [
             {"term": phrase, "score": round(count / 5, 4)}
@@ -357,7 +366,7 @@ class TFIDFService:
         
         # ===== 4. 競品共同出現詞彙 =====
         term_in_competitors: Dict[str, int] = Counter()
-        for text in all_texts:
+        for text in docs_for_heavy_ops:
             words = set(self._segment_text(text, keep_long=True))
             for word in words:
                 if len(word) >= 2:

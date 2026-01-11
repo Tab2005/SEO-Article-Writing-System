@@ -71,6 +71,43 @@ export interface AnalysisReport {
     generated_at: string
 }
 
+export interface ResearchJob {
+    job_id: string
+    keyword: string
+    market: string
+    depth: number
+    status: string
+    progress: number
+    message?: string
+    error?: string
+    created_at: string
+    started_at?: string
+    completed_at?: string
+}
+
+export interface ResearchCompetitorSummary {
+    rank: number
+    url: string
+    serp_title?: string
+    snippet?: string
+    fetch_status: string
+    http_status?: number
+    error?: string
+    page_title?: string
+    meta_description?: string
+    word_count?: number
+    scraped_at?: string
+    has_content: boolean
+}
+
+export interface ResearchCompetitorContent {
+    rank: number
+    url: string
+    page_title?: string
+    content_text: string
+    scraped_at?: string
+}
+
 export interface SerpResponse {
     keyword: string
     market: string
@@ -110,6 +147,65 @@ export const researchService = {
             market,
             depth
         })
+        return response.data
+    },
+
+    /**
+     * Create a persistent research job (async, stored in DB)
+     */
+    async createJob(keyword: string, market: string = 'tw', depth: number = 10): Promise<ResearchJob> {
+        const response = await api.post<ResearchJob>('/research/jobs', {
+            keyword,
+            market,
+            depth,
+        })
+        return response.data
+    },
+
+    /**
+     * List all research jobs (history)
+     */
+    async listJobs(params?: { limit?: number; offset?: number; keyword?: string; status?: string }): Promise<ResearchJob[]> {
+        const response = await api.get<ResearchJob[]>('/research/jobs', { params })
+        return response.data
+    },
+
+    /**
+     * Delete a research job
+     */
+    async deleteJob(jobId: string): Promise<void> {
+        await api.delete(`/research/jobs/${jobId}`)
+    },
+
+    /**
+     * Get persistent research job status
+     */
+    async getJob(jobId: string): Promise<ResearchJob> {
+        const response = await api.get<ResearchJob>(`/research/jobs/${jobId}`)
+        return response.data
+    },
+
+    /**
+     * Get AnalysisReport generated for a job
+     */
+    async getJobReport(jobId: string): Promise<AnalysisReport> {
+        const response = await api.get<AnalysisReport>(`/research/jobs/${jobId}/report`)
+        return response.data
+    },
+
+    /**
+     * List competitors for a job (no full text)
+     */
+    async listJobCompetitors(jobId: string): Promise<ResearchCompetitorSummary[]> {
+        const response = await api.get<ResearchCompetitorSummary[]>(`/research/jobs/${jobId}/competitors`)
+        return response.data
+    },
+
+    /**
+     * Get single competitor full content text
+     */
+    async getJobCompetitorContent(jobId: string, rank: number): Promise<ResearchCompetitorContent> {
+        const response = await api.get<ResearchCompetitorContent>(`/research/jobs/${jobId}/competitors/${rank}/content`)
         return response.data
     },
 

@@ -8,9 +8,9 @@ import uuid
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import String, DateTime, Text, Integer, ForeignKey, func, Enum
+from sqlalchemy import JSON, String, DateTime, Text, Integer, ForeignKey, func, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 import enum
 
 from app.core.database import Base
@@ -65,7 +65,7 @@ class Article(Base):
         nullable=True,
     )
     outline: Mapped[Optional[dict]] = mapped_column(
-        JSONB,
+        JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
     
@@ -76,7 +76,7 @@ class Article(Base):
         index=True,
     )
     secondary_keywords: Mapped[Optional[list]] = mapped_column(
-        JSONB,
+        JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
     meta_description: Mapped[Optional[str]] = mapped_column(

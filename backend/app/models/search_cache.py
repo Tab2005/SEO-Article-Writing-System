@@ -8,9 +8,9 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, DateTime, Text, Integer, func
+from sqlalchemy import JSON, String, DateTime, Text, Integer, func
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 from app.core.database import Base
 
@@ -49,15 +49,15 @@ class SearchCache(Base):
     
     # Cached Data
     serp_results: Mapped[dict] = mapped_column(
-        JSONB,
+        JSON().with_variant(JSONB, "postgresql"),
         nullable=False,
     )
     competitor_data: Mapped[Optional[dict]] = mapped_column(
-        JSONB,
+        JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
     analysis_report: Mapped[Optional[dict]] = mapped_column(
-        JSONB,
+        JSON().with_variant(JSONB, "postgresql"),
         nullable=True,
     )
     
