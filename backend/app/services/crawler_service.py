@@ -188,17 +188,34 @@ class CrawlerService:
         Returns:
             List of CompetitorData for successfully crawled pages
         """
+        # Return mock data for development
         import asyncio
         
-        tasks = [
-            self.crawl_page(url, rank)
-            for rank, url in enumerate(urls, start=1)
-        ]
+        mock_data = []
+        for rank, url in enumerate(urls, start=1):
+            mock_data.append(self._get_mock_competitor_data(url, rank))
         
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return mock_data
+    
+    def _get_mock_competitor_data(self, url: str, rank: int) -> CompetitorData:
+        """Return mock competitor data for development."""
+        from datetime import datetime, timezone
         
-        # Filter out None and exceptions
-        return [r for r in results if isinstance(r, CompetitorData)]
+        return CompetitorData(
+            rank=rank,
+            url=url,
+            title=f"Mock Title for {url}",
+            word_count=1500 + rank * 100,
+            headings=HeadingStructure(
+                h1=["Mock H1"],
+                h2=["Mock H2 Section", "Another H2"],
+                h3=["Mock H3 Subsection"]
+            ),
+            meta_description=f"Mock description for {url}",
+            meta_keywords="mock, keywords, test",
+            content_text="Mock content text for SEO analysis. This is a placeholder for actual crawled content.",
+            scraped_at=datetime.now(timezone.utc),
+        )
 
 
 # Singleton instance

@@ -84,6 +84,24 @@ class Article(Base):
         nullable=True,
     )
     
+    # Strategy Wizard Config (Phase 3)
+    strategy_config: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=True,
+        comment="Stores intent, tone, lsi_keywords, suggested_titles from wizard",
+    )
+    research_job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+        comment="Links to the research job used for this article",
+    )
+    wizard_step: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="Current wizard step (1-4) for draft resumption",
+    )
+    
     # Statistics
     word_count: Mapped[int] = mapped_column(
         Integer,

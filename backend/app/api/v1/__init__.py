@@ -12,7 +12,7 @@ api_v1_router = APIRouter()
 
 # Include routers
 api_v1_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-api_v1_router.include_router(research.router, prefix="/research", tags=["Research"])
+# api_v1_router.include_router(research.router, prefix="/research", tags=["Research"])
 api_v1_router.include_router(content.router, prefix="/content", tags=["Content"])
 api_v1_router.include_router(projects.router, prefix="/projects", tags=["Projects"])
 api_v1_router.include_router(seo.router, prefix="/seo", tags=["SEO"])

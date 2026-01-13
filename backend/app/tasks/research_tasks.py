@@ -56,9 +56,11 @@ async def _run_research_job_async(job_id: str) -> Dict[str, Any]:
     async with async_session_maker() as db:
         job = await db.get(ResearchJob, job_uuid)
         if job is None:
+            print(f"Job {job_id} not found")
             return {"status": "failed", "message": "Job not found"}
 
         try:
+            print(f"Starting research job {job_id} for keyword: {job.keyword}")
             await _set_job_state(job, status="running", progress=10, message="Fetching SERP results...")
             await db.commit()
 
@@ -67,6 +69,7 @@ async def _run_research_job_async(job_id: str) -> Dict[str, Any]:
                 market=job.market,
                 num_results=job.depth,
             )
+            print(f"Fetched {len(serp.results)} SERP results")
 
             # Persist SERP snapshot
             for item in serp.results:
@@ -95,6 +98,7 @@ async def _run_research_job_async(job_id: str) -> Dict[str, Any]:
                     competitor.serp_fetched_at = item.scraped_at or serp.fetched_at
 
             await db.commit()
+            print("Persisted SERP results to database")
 
             await _set_job_state(job, status="running", progress=30, message="Crawling competitor pages...")
             await db.commit()

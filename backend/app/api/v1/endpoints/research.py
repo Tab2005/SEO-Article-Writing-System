@@ -74,30 +74,40 @@ async def create_job_endpoint(
     current_user: Optional[User] = Depends(get_optional_current_user),
 ):
     """Create a persistent research job and enqueue background execution."""
-    user_id = getattr(current_user, "id", None) if current_user else None
-    job = await create_research_job(
-        db,
-        keyword=request.keyword,
-        market=request.market,
-        depth=request.depth,
-        user_id=user_id,
-    )
-
-    # Try Celery; fallback to FastAPI BackgroundTasks (dev mode)
     try:
-        from app.tasks.research_tasks import run_research_job_task
+        print(f"Creating research job for keyword: {request.keyword}")
+        user_id = getattr(current_user, "id", None) if current_user else None
+        job = await create_research_job(
+            db,
+            keyword=request.keyword,
+            market=request.market,
+            depth=request.depth,
+            user_id=user_id,
+        )
 
-        run_research_job_task.delay(str(job.id))
-        job.message = "Queued in Celery"
+        # Always use FastAPI BackgroundTasks for development
+        from app.tasks.research_tasks import _run_research_job_async
+
+        job.message = "Processing synchronously"
+        # Run synchronously for now to avoid background task issues
+        try:
+            await _run_research_job_async(str(job.id))
+        except Exception as e:
+            print(f"Job execution failed: {e}")
+            job.status = "failed"
+            job.error = str(e)
+            job.completed_at = datetime.now(timezone.utc)
+        
+        # background_tasks.add_task(run_job)
+
+        await db.commit()
+        await db.refresh(job)
+        return _job_to_response(job)
     except Exception as e:
-        from app.tasks.research_tasks import run_research_job
-
-        job.message = f"Queued in API process (Celery unavailable): {e}"
-        background_tasks.add_task(run_research_job, str(job.id))
-
-    await db.commit()
-    await db.refresh(job)
-    return _job_to_response(job)
+        print(f"Error creating research job: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 @router.get("/jobs", response_model=List[ResearchJobResponse])
