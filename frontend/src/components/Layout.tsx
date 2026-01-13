@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Sparkles, LayoutDashboard, Search, FileText, FolderOpen, Target, Settings, LogOut } from 'lucide-react'
+import { Sparkles, LayoutDashboard, Search, FileText, FolderOpen, Target, Settings, LogOut, Wand2 } from 'lucide-react'
 import { useAuthStore } from '../store/authStore'
 import { authService } from '../services/auth.service'
 import { ThemeToggle } from './ThemeToggle'
@@ -20,6 +20,7 @@ function Layout() {
         { path: '/', icon: LayoutDashboard, label: '儀表板' },
         { path: '/research', icon: Search, label: '關鍵字研究' },
         { path: '/content', icon: FileText, label: '內容生成' },
+        { path: '/strategy-wizard', icon: Wand2, label: '策略導引' },
         { path: '/seo-checker', icon: Target, label: 'SEO 檢查' },
         { path: '/projects', icon: FolderOpen, label: '專案管理' },
         { path: '/settings', icon: Settings, label: '系統設定' },

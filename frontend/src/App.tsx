@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Research from './pages/Research'
 import ContentGeneration from './pages/ContentGeneration'
+import StrategyWizard from './pages/StrategyWizard'
 import Projects from './pages/Projects'
 import SEOChecker from './pages/SEOChecker'
 import Settings from './pages/Settings'
@@ -28,6 +29,7 @@ function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="research" element={<Research />} />
                 <Route path="content" element={<ContentGeneration />} />
+                <Route path="strategy-wizard" element={<StrategyWizard />} />
                 <Route path="projects" element={<Projects />} />
                 <Route path="seo-checker" element={<SEOChecker />} />
                 <Route path="settings" element={<Settings />} />
