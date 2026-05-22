@@ -17,6 +17,11 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.article import Article
+    from app.models.site_profile import SiteProfile
+    from app.models.topic_node import TopicNode
+    from app.models.content_item import ContentItem
+    from app.models.qualification_result import QualificationResult
+    from app.models.article_brief import ArticleBrief
 
 
 class Project(Base):
@@ -56,16 +61,34 @@ class Project(Base):
         nullable=False,
     )
     
+    # New planning fields
+    mode: Mapped[str] = mapped_column(
+        String(50),
+        default="existing_site",
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        String(50),
+        default="draft",
+        nullable=False,
+    )
+    domain: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=datetime.utcnow,
         server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        default=datetime.utcnow,
         server_default=func.now(),
-        onupdate=func.now(),
+        onupdate=datetime.utcnow,
         nullable=False,
     )
     
@@ -76,6 +99,32 @@ class Project(Base):
     )
     articles: Mapped[List["Article"]] = relationship(
         "Article",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    site_profile: Mapped[Optional["SiteProfile"]] = relationship(
+        "SiteProfile",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
+    topic_nodes: Mapped[List["TopicNode"]] = relationship(
+        "TopicNode",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    content_items: Mapped[List["ContentItem"]] = relationship(
+        "ContentItem",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    qualification_results: Mapped[List["QualificationResult"]] = relationship(
+        "QualificationResult",
+        back_populates="project",
+        cascade="all, delete-orphan",
+    )
+    briefs: Mapped[List["ArticleBrief"]] = relationship(
+        "ArticleBrief",
         back_populates="project",
         cascade="all, delete-orphan",
     )

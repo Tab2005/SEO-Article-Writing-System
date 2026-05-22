@@ -34,6 +34,7 @@ class ArticleDraftService:
         strategy_config: Optional[Dict[str, Any]] = None,
         outline: Optional[Dict[str, Any]] = None,
         research_job_id: Optional[uuid.UUID] = None,
+        brief_id: Optional[uuid.UUID] = None,
     ) -> Article:
         """
         Create a new article draft.
@@ -47,6 +48,7 @@ class ArticleDraftService:
             strategy_config: Strategy settings (intent, tone, lsi, etc.)
             outline: Article outline structure
             research_job_id: Associated research job
+            brief_id: Associated article brief
             
         Returns:
             Created Article instance
@@ -60,6 +62,8 @@ class ArticleDraftService:
             strategy_config=strategy_config,
             outline=outline,
             research_job_id=research_job_id,
+            brief_id=brief_id,
+            qa_status="pending",
         )
         
         db.add(draft)
@@ -81,6 +85,9 @@ class ArticleDraftService:
         status: Optional[ArticleStatus] = None,
         word_count: Optional[int] = None,
         secondary_keywords: Optional[List[str]] = None,
+        brief_id: Optional[uuid.UUID] = None,
+        qa_status: Optional[str] = None,
+        qa_results: Optional[Dict[str, Any]] = None,
     ) -> Optional[Article]:
         """
         Update an existing draft.
@@ -114,6 +121,12 @@ class ArticleDraftService:
             update_data["word_count"] = word_count
         if secondary_keywords is not None:
             update_data["secondary_keywords"] = secondary_keywords
+        if brief_id is not None:
+            update_data["brief_id"] = brief_id
+        if qa_status is not None:
+            update_data["qa_status"] = qa_status
+        if qa_results is not None:
+            update_data["qa_results"] = qa_results
         
         if not update_data:
             # No updates, just return the draft
@@ -268,6 +281,110 @@ class ArticleDraftService:
         
         return await self.update_draft(db, draft_id, **update_kwargs)
 
+    async def create_draft_version(
+        self,
+        db: AsyncSession,
+        draft_id: uuid.UUID,
+    ) -> Optional[Article]:
+        """
+        Create a backup version of the current draft.
+        The backup will have parent_version_id pointing to the main draft.
+        The main draft's version counter will increment.
+        """
+        draft = await self.get_draft(db, draft_id)
+        if not draft or draft.parent_version_id is not None:
+            return None
+            
+        # Create historical backup
+        backup = Article(
+            project_id=draft.project_id,
+            brief_id=draft.brief_id,
+            title=draft.title,
+            slug=draft.slug,
+            content=draft.content,
+            outline=draft.outline,
+            target_keyword=draft.target_keyword,
+            secondary_keywords=draft.secondary_keywords,
+            meta_description=draft.meta_description,
+            strategy_config=draft.strategy_config,
+            research_job_id=draft.research_job_id,
+            wizard_step=draft.wizard_step,
+            word_count=draft.word_count,
+            status=draft.status,
+            qa_status=draft.qa_status,
+            qa_results=draft.qa_results,
+            version=draft.version, # Matches the current main version
+            parent_version_id=draft.id, # Points to main
+        )
+        db.add(backup)
+        
+        # Increment main draft's version
+        draft.version += 1
+        draft.updated_at = datetime.utcnow()
+        
+        await db.commit()
+        await db.refresh(backup)
+        await db.refresh(draft)
+        return backup
+
+    async def list_draft_versions(
+        self,
+        db: AsyncSession,
+        draft_id: uuid.UUID,
+    ) -> List[Article]:
+        """
+        List all backup versions for a draft.
+        """
+        result = await db.execute(
+            select(Article)
+            .where(Article.parent_version_id == draft_id)
+            .order_by(desc(Article.version))
+        )
+        return list(result.scalars().all())
+
+    async def rollback_to_version(
+        self,
+        db: AsyncSession,
+        draft_id: uuid.UUID,
+        version_id: uuid.UUID,
+    ) -> Optional[Article]:
+        """
+        Rollback the main draft to a historical version.
+        Before rolling back, a backup of the current state is created.
+        """
+        draft = await self.get_draft(db, draft_id)
+        if not draft or draft.parent_version_id is not None:
+            return None
+            
+        # Get target version
+        result = await db.execute(
+            select(Article)
+            .where(Article.id == version_id, Article.parent_version_id == draft_id)
+        )
+        target = result.scalar_one_or_none()
+        if not target:
+            return None
+            
+        # Backup current state first
+        await self.create_draft_version(db, draft_id)
+        
+        # Restore target version contents to main draft
+        draft.title = target.title
+        draft.content = target.content
+        draft.outline = target.outline
+        draft.secondary_keywords = target.secondary_keywords
+        draft.meta_description = target.meta_description
+        draft.word_count = target.word_count
+        draft.status = target.status
+        draft.qa_status = target.qa_status
+        draft.qa_results = target.qa_results
+        
+        draft.updated_at = datetime.utcnow()
+        await db.commit()
+        await db.refresh(draft)
+        return draft
+
 
 # Singleton instance
 article_draft_service = ArticleDraftService()
+

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
     CheckCircle2, XCircle, AlertCircle, Loader2,
-    TrendingUp, FileText, Target, Type
+    TrendingUp, Target
 } from 'lucide-react'
 import api from '../services/api'
 

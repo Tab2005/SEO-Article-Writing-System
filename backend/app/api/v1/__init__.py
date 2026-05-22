@@ -6,7 +6,21 @@ Aggregates all v1 API endpoints.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import auth, research, content, projects, seo, websocket, settings, ai
+from app.api.v1.endpoints import (
+    auth,
+    research,
+    content,
+    projects,
+    seo,
+    websocket,
+    settings,
+    ai,
+    site_profiles,
+    topic_nodes,
+    content_items,
+    qualification,
+    briefs,
+)
 
 api_v1_router = APIRouter()
 
@@ -15,7 +29,14 @@ api_v1_router.include_router(auth.router, prefix="/auth", tags=["Authentication"
 # api_v1_router.include_router(research.router, prefix="/research", tags=["Research"])
 api_v1_router.include_router(content.router, prefix="/content", tags=["Content"])
 api_v1_router.include_router(projects.router, prefix="/projects", tags=["Projects"])
+api_v1_router.include_router(site_profiles.router, prefix="/projects/{project_id}/site-profile", tags=["Site Profile"])
+api_v1_router.include_router(topic_nodes.router, prefix="/projects/{project_id}", tags=["Topic Map"])
+api_v1_router.include_router(content_items.router, prefix="/projects/{project_id}", tags=["Content Library"])
+api_v1_router.include_router(qualification.router, prefix="/projects/{project_id}", tags=["Qualification"])
+api_v1_router.include_router(briefs.router, prefix="/projects/{project_id}", tags=["Article Briefs"])
 api_v1_router.include_router(seo.router, prefix="/seo", tags=["SEO"])
 api_v1_router.include_router(settings.router, prefix="/settings", tags=["Settings"])
 api_v1_router.include_router(ai.router, prefix="/ai", tags=["AI Hub"])
 api_v1_router.include_router(websocket.router, tags=["WebSocket"])
+
+

@@ -46,7 +46,7 @@ function StrategyWizard() {
 
     // Step 1: Research
     const [keyword, setKeyword] = useState('')
-    const [market, setMarket] = useState('tw')
+    const [market] = useState('tw')
     const [jobId, setJobId] = useState<string | null>(null)
     const [job, setJob] = useState<ResearchJob | null>(null)
     const [report, setReport] = useState<AnalysisReport | null>(null)

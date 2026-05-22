@@ -7,7 +7,7 @@ Handles AI-powered content generation.
 from typing import Optional, List, Dict, Any
 import uuid
 
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.models.research_job import ResearchArtifact
 from app.models.article import Article, ArticleStatus
+from app.models.article_brief import ArticleBrief
 from app.schemas.article import (
     ArticleOutline,
     ArticleGenerateRequest,
@@ -26,6 +27,8 @@ from app.services import llm_service, analysis_service, google_search_service, c
 from app.services.strategy_service import strategy_service, StrategyPack
 from app.services.article_draft_service import article_draft_service
 from app.services.streaming_service import streaming_service
+from app.services.brief_service import brief_service
+from app.services.qa_service import qa_service
 
 router = APIRouter()
 
@@ -50,6 +53,7 @@ class OutlineRequest(BaseModel):
     use_competitor_analysis: bool = Field(default=True)
     market: str = Field(default="tw")
     research_job_id: Optional[uuid.UUID] = None
+    brief_id: Optional[uuid.UUID] = None
 
 
 class ContentRequest(BaseModel):
@@ -61,6 +65,8 @@ class ContentRequest(BaseModel):
     tone: str = Field(default="professional")
     market: str = Field(default="tw")
     research_job_id: Optional[uuid.UUID] = None
+    brief_id: Optional[uuid.UUID] = None
+    outline: Optional[ArticleOutline] = None
 
 
 class ContentOptimizeRequest(BaseModel):
@@ -117,6 +123,11 @@ async def generate_outline(request: OutlineRequest, db: AsyncSession = Depends(g
             # Continue without competitor analysis if it fails
             pass
     
+    brief_data = None
+    if request.brief_id:
+        result = await db.execute(select(ArticleBrief).where(ArticleBrief.id == request.brief_id))
+        brief_data = result.scalar_one_or_none()
+
     outline = await llm_service.generate_outline(
         topic=request.topic,
         target_keyword=request.target_keyword,
@@ -124,6 +135,7 @@ async def generate_outline(request: OutlineRequest, db: AsyncSession = Depends(g
         competitor_h2s=competitor_h2s,
         word_count_target=request.word_count_target,
         tone=request.tone,
+        brief_data=brief_data,
     )
     
     return outline
@@ -137,6 +149,16 @@ async def generate_content(request: ContentRequest, db: AsyncSession = Depends(g
     Creates complete article based on topic and keywords.
     Includes competitor analysis for SEO optimization.
     """
+    # Auto-backup existing draft if it already has content
+    if request.brief_id:
+        result = await db.execute(
+            select(Article)
+            .where(Article.brief_id == request.brief_id, Article.parent_version_id == None)
+        )
+        existing_draft = result.scalar_one_or_none()
+        if existing_draft and existing_draft.content:
+            await article_draft_service.create_draft_version(db, existing_draft.id)
+
     # Step 1: Get competitor insights
     competitor_h2s = None
     if request.research_job_id:
@@ -169,21 +191,31 @@ async def generate_content(request: ContentRequest, db: AsyncSession = Depends(g
         except Exception:
             pass
     
+    brief_data = None
+    if request.brief_id:
+        result = await db.execute(select(ArticleBrief).where(ArticleBrief.id == request.brief_id))
+        brief_data = result.scalar_one_or_none()
+
     # Step 2: Generate outline
-    outline = await llm_service.generate_outline(
-        topic=request.topic,
-        target_keyword=request.target_keyword,
-        secondary_keywords=request.secondary_keywords,
-        competitor_h2s=competitor_h2s,
-        word_count_target=request.word_count_target,
-        tone=request.tone,
-    )
+    if request.outline:
+        outline = request.outline
+    else:
+        outline = await llm_service.generate_outline(
+            topic=request.topic,
+            target_keyword=request.target_keyword,
+            secondary_keywords=request.secondary_keywords,
+            competitor_h2s=competitor_h2s,
+            word_count_target=request.word_count_target,
+            tone=request.tone,
+            brief_data=brief_data,
+        )
     
     # Step 3: Generate full content
     content = await llm_service.generate_full_article(
         outline=outline,
         target_keyword=request.target_keyword,
         secondary_keywords=request.secondary_keywords,
+        brief_data=brief_data,
     )
     
     return {
@@ -304,6 +336,7 @@ class DraftCreateRequest(BaseModel):
     strategy_config: Optional[Dict[str, Any]] = None
     outline: Optional[Dict[str, Any]] = None
     research_job_id: Optional[uuid.UUID] = None
+    brief_id: Optional[uuid.UUID] = None
 
 
 class DraftUpdateRequest(BaseModel):
@@ -316,6 +349,9 @@ class DraftUpdateRequest(BaseModel):
     word_count: Optional[int] = None
     secondary_keywords: Optional[List[str]] = None
     status: Optional[str] = None
+    brief_id: Optional[uuid.UUID] = None
+    qa_status: Optional[str] = None
+    qa_results: Optional[Dict[str, Any]] = None
 
 
 class DraftResponse(BaseModel):
@@ -331,6 +367,9 @@ class DraftResponse(BaseModel):
     content: Optional[str]
     word_count: int
     research_job_id: Optional[uuid.UUID]
+    brief_id: Optional[uuid.UUID] = None
+    qa_status: Optional[str] = None
+    qa_results: Optional[Dict[str, Any]] = None
     created_at: str
     updated_at: str
 
@@ -358,6 +397,16 @@ async def create_draft(
     
     Initializes a draft for the Strategy Wizard flow.
     """
+    if request.brief_id:
+        brief = await brief_service.get_brief(db, request.brief_id)
+        if not brief:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article brief not found.")
+        if brief.status != "approved":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="文章任務書尚未被核准 (Article brief has not been approved)."
+            )
+
     draft = await article_draft_service.create_draft(
         db,
         project_id=request.project_id,
@@ -367,6 +416,7 @@ async def create_draft(
         strategy_config=request.strategy_config,
         outline=request.outline,
         research_job_id=request.research_job_id,
+        brief_id=request.brief_id,
     )
     
     return {
@@ -376,6 +426,7 @@ async def create_draft(
         "target_keyword": draft.target_keyword,
         "wizard_step": draft.wizard_step,
         "status": draft.status.value,
+        "brief_id": str(draft.brief_id) if draft.brief_id else None,
         "created_at": draft.created_at.isoformat(),
     }
 
@@ -408,6 +459,9 @@ async def get_draft(
         "word_count": draft.word_count,
         "research_job_id": str(draft.research_job_id) if draft.research_job_id else None,
         "secondary_keywords": draft.secondary_keywords,
+        "brief_id": str(draft.brief_id) if draft.brief_id else None,
+        "qa_status": draft.qa_status,
+        "qa_results": draft.qa_results,
         "created_at": draft.created_at.isoformat(),
         "updated_at": draft.updated_at.isoformat(),
     }
@@ -424,6 +478,16 @@ async def update_draft(
     
     Saves wizard progress at any step.
     """
+    if request.brief_id:
+        brief = await brief_service.get_brief(db, request.brief_id)
+        if not brief:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Article brief not found.")
+        if brief.status != "approved":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="文章任務書尚未被核准 (Article brief has not been approved)."
+            )
+
     # Convert status string to enum if provided
     status_enum = None
     if request.status:
@@ -443,6 +507,9 @@ async def update_draft(
         word_count=request.word_count,
         secondary_keywords=request.secondary_keywords,
         status=status_enum,
+        brief_id=request.brief_id,
+        qa_status=request.qa_status,
+        qa_results=request.qa_results,
     )
     
     if not draft:
@@ -453,6 +520,9 @@ async def update_draft(
         "title": draft.title,
         "wizard_step": draft.wizard_step,
         "status": draft.status.value,
+        "brief_id": str(draft.brief_id) if draft.brief_id else None,
+        "qa_status": draft.qa_status,
+        "qa_results": draft.qa_results,
         "updated_at": draft.updated_at.isoformat(),
     }
 
@@ -508,11 +578,95 @@ async def list_drafts(
                 "wizard_step": d.wizard_step,
                 "status": d.status.value,
                 "word_count": d.word_count,
+                "brief_id": str(d.brief_id) if d.brief_id else None,
+                "qa_status": d.qa_status,
                 "updated_at": d.updated_at.isoformat(),
             }
             for d in drafts
         ],
         "count": len(drafts),
+    }
+
+
+@router.post("/draft/{draft_id}/qa")
+async def run_draft_qa(
+    draft_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run QA Gate V1 check on a draft.
+    """
+    article = await qa_service.run_qa(db, draft_id)
+    return {
+        "id": str(article.id),
+        "qa_status": article.qa_status,
+        "qa_results": article.qa_results,
+        "updated_at": article.updated_at.isoformat(),
+    }
+
+
+@router.post("/draft/{draft_id}/save-version")
+async def save_draft_version(
+    draft_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a backup of the current draft.
+    """
+    backup = await article_draft_service.create_draft_version(db, draft_id)
+    if not backup:
+        raise HTTPException(status_code=404, detail="Draft not found or is already a historical version.")
+    return {
+        "message": "Draft version saved successfully",
+        "backup_id": str(backup.id),
+        "version": backup.version
+    }
+
+
+@router.get("/draft/{draft_id}/versions")
+async def list_draft_versions(
+    draft_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get history versions of the draft.
+    """
+    versions = await article_draft_service.list_draft_versions(db, draft_id)
+    return [
+        {
+            "id": str(v.id),
+            "version": v.version,
+            "title": v.title,
+            "word_count": v.word_count,
+            "status": v.status.value,
+            "qa_status": v.qa_status,
+            "created_at": v.created_at.isoformat(),
+            "updated_at": v.updated_at.isoformat(),
+        }
+        for v in versions
+    ]
+
+
+@router.post("/draft/{draft_id}/versions/{version_id}/rollback")
+async def rollback_draft_version(
+    draft_id: uuid.UUID,
+    version_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Rollback the main draft to a historical version.
+    """
+    draft = await article_draft_service.rollback_to_version(db, draft_id, version_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Draft or target version not found.")
+    return {
+        "message": "Draft rolled back successfully",
+        "id": str(draft.id),
+        "title": draft.title,
+        "content": draft.content,
+        "outline": draft.outline,
+        "version": draft.version,
+        "updated_at": draft.updated_at.isoformat()
     }
 
 

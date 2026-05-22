@@ -1,6 +1,5 @@
 import api from './api'
 
-// Draft types
 export interface DraftCreateRequest {
     project_id: string
     keyword: string
@@ -9,6 +8,7 @@ export interface DraftCreateRequest {
     strategy_config?: Record<string, unknown>
     outline?: Record<string, unknown>
     research_job_id?: string
+    brief_id?: string
 }
 
 export interface DraftUpdateRequest {
@@ -20,6 +20,9 @@ export interface DraftUpdateRequest {
     word_count?: number
     secondary_keywords?: string[]
     status?: string
+    brief_id?: string
+    qa_status?: string
+    qa_results?: Record<string, unknown>
 }
 
 export interface Draft {
@@ -35,6 +38,9 @@ export interface Draft {
     word_count: number
     research_job_id: string | null
     secondary_keywords: string[] | null
+    brief_id?: string | null
+    qa_status?: string | null
+    qa_results?: Record<string, unknown> | null
     created_at: string
     updated_at: string
 }

@@ -9,6 +9,7 @@ export interface OutlineRequest {
     tone?: string
     use_competitor_analysis?: boolean
     market?: string
+    brief_id?: string
 }
 
 export interface ContentRequest {
@@ -18,6 +19,8 @@ export interface ContentRequest {
     word_count_target?: number
     tone?: string
     market?: string
+    brief_id?: string
+    outline?: ArticleOutline
 }
 
 export interface ContentResponse {
@@ -54,5 +57,54 @@ export const contentService = {
             target_keywords: targetKeywords
         })
         return response.data
+    },
+
+    /**
+     * Run QA check on a draft
+     */
+    async runQA(draftId: string): Promise<any> {
+        const response = await api.post(`/content/draft/${draftId}/qa`)
+        return response.data
+    },
+
+    /**
+     * Get content queue for a project
+     */
+    async getContentQueue(projectId: string): Promise<any[]> {
+        const response = await api.get(`/projects/${projectId}/content-queue`)
+        return response.data
+    },
+
+    /**
+     * Get draft version history
+     */
+    async getDraftVersions(draftId: string): Promise<any[]> {
+        const response = await api.get(`/content/draft/${draftId}/versions`)
+        return response.data
+    },
+
+    /**
+     * Save current draft content as a new version
+     */
+    async saveNewVersion(draftId: string): Promise<any> {
+        const response = await api.post(`/content/draft/${draftId}/save-version`)
+        return response.data
+    },
+
+    /**
+     * Rollback a draft to a specific version
+     */
+    async rollbackVersion(draftId: string, versionId: string): Promise<any> {
+        const response = await api.post(`/content/draft/${draftId}/versions/${versionId}/rollback`)
+        return response.data
+    },
+
+    /**
+     * Seed demo project data
+     */
+    async seedDemo(): Promise<any> {
+        const response = await api.post('/projects/seed-demo')
+        return response.data
     }
 }
+

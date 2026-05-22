@@ -138,3 +138,7 @@ celerybeat.pid
 
 # Allow local overrides
 !.gitignore.local
+
+# Local databases and scratch files
+backend/seo_article.db
+scratch/

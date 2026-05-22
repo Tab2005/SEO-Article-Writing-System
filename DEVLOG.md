@@ -7,6 +7,42 @@
 
 ---
 
+## 2026/05/22 (今日)
+
+### 🛠️ API 契約收斂與 Draft 持久化
+- 修正了 `/health` 端點以包含 ISO-8601 `timestamp`，解決測試契約 drift。
+- 在後端 SQLAlchemy `Article` 模型與 schemas 中新增 `brief_id`、`qa_status` 與 `qa_results` 等欄位，並套用 Alembic 遷移。
+- 修改 `/content/draft` 路由強制實施 approved Brief 的約束。
+- 前端寫作生成後，在背景自動關聯 approved Brief 保存為草稿 (Draft) 以作後續追溯。
+
+### 📝 大綱編輯實質資料流串聯
+- 前端將編輯後的大綱 (`editableSections`) 傳送回後端 `/generate` 端點。
+- 後端接收到大綱後，跳過 AI 大綱生成，直接採用傳入的大綱進行文章段落撰寫。
+
+### 🛡️ 實作 QA Gate V1 品質稽核
+- 建立後端 `qa_service.py` 服務，對照網站定位與任務書，進行 Identity Fit、Restricted Angles、Info Gain 與 CTA Direction 四大指標的 LLM 評估。
+- 新增 `POST /content/draft/{draft_id}/qa` 端點及對應的 `tests/test_qa.py` 單元測試。
+- 前端新增了「AI 品質審查」UI 面板，展示稽核狀態、問題細項與優化建議，並支援重新審查。
+
+### 📋 實作 Phase 5: Operational Layer (運作管理層)
+- **內容佇列 (Content Queue)**：
+  - 後端實作了 `GET /projects/{project_id}/content-queue` 端點，聚合關鍵字、任務書與草稿狀態。
+  - 前端實作了 `ContentQueue.tsx`，支援高質感的 Kanban 與 Table 雙視圖切換及快速操作。
+- **版本控制與變更軌跡 (Versioning & Rollback)**：
+  - 後端實作了版本手動備份、列表查詢與一鍵還原 (Rollback) API，並在 `/generate` 文章寫作重新生成前自動執行舊草稿備份。
+  - 前端於 ContentGeneration 頁面整合「版本歷史」側邊欄，支援一鍵回滾並與編輯器及字數即時同步。
+- **預置示範數據 (Seed Demo Projects)**：
+  - 後端編寫了 `seed_demo.py` 模擬數據，並在前端 Settings 頁面整合「一鍵預置」入口。
+
+### 🧪 驗證與編譯
+- 新增 `tests/test_versioning.py` 測試版本保存與還原。
+- 修正 `tests/test_content_queue.py` 資料庫 schema 屬性不一致問題，以及 `test_list_draft_versions` 對回傳欄位的檢查斷言。
+- 修正前端 `ContentQueue.tsx` 未使用的 React/ArrowRight 導入與錯誤的 LayoutKanban 圖標。
+- 執行後端 pytest，全數 **27 Passed** 成功通過。
+- 前端 `npm run build` 生產環境編譯成功，無任何 TypeScript 類型錯誤。
+
+---
+
 ## 2026/01/09 (今日)
 
 ### 🎨 新增暗色模式切換

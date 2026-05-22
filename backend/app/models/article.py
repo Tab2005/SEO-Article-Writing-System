@@ -17,6 +17,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.project import Project
+    from app.models.article_brief import ArticleBrief
 
 
 class ArticleStatus(str, enum.Enum):
@@ -45,6 +46,13 @@ class Article(Base):
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    
+    brief_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("article_briefs.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     
@@ -127,6 +135,17 @@ class Article(Base):
         nullable=False,
     )
     
+    qa_status: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        default="pending",
+        nullable=True,
+    )
+    
+    qa_results: Mapped[Optional[dict]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=True,
+    )
+    
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -147,6 +166,11 @@ class Article(Base):
     # Relationships
     project: Mapped["Project"] = relationship(
         "Project",
+        back_populates="articles",
+    )
+    
+    brief: Mapped[Optional["ArticleBrief"]] = relationship(
+        "ArticleBrief",
         back_populates="articles",
     )
     

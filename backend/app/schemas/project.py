@@ -18,6 +18,9 @@ class ProjectBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     target_market: str = Field(default="tw", max_length=10)
+    mode: str = Field(default="existing_site", max_length=50)
+    status: str = Field(default="draft", max_length=50)
+    domain: Optional[str] = Field(None, max_length=255)
 
 
 # ===== Request Schemas =====
@@ -32,6 +35,9 @@ class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     target_market: Optional[str] = Field(None, max_length=10)
+    mode: Optional[str] = Field(None, max_length=50)
+    status: Optional[str] = Field(None, max_length=50)
+    domain: Optional[str] = Field(None, max_length=255)
 
 
 # ===== Response Schemas =====

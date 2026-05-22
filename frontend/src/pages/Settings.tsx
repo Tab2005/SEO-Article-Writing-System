@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
     Save, TestTube, CheckCircle2,
-    XCircle, Loader2, Eye, EyeOff, Key, Globe, Cpu
+    XCircle, Loader2, Eye, EyeOff, Key, Globe, Cpu, Database
 } from 'lucide-react'
 import api from '../services/api'
 import { useAuthStore } from '../store/authStore'
+import { contentService } from '../services/content.service'
 
 interface SettingsData {
     google_api_key: string
@@ -69,6 +70,31 @@ function Settings() {
     const [googleTestResult, setGoogleTestResult] = useState<TestResult | null>(null)
     const [aiTestResult, setAiTestResult] = useState<TestResult | null>(null)
 
+    // Seeding states
+    const [seeding, setSeeding] = useState(false)
+    const [seedSuccess, setSeedSuccess] = useState<string | null>(null)
+
+    const handleSeedDemo = async () => {
+        if (!window.confirm('此操作將會清空所有現有專案、關鍵字、任務書與草稿，並重新預置展示數據。確定要繼續嗎？')) {
+            return
+        }
+        setSeeding(true)
+        setError(null)
+        setSuccess(null)
+        setSeedSuccess(null)
+        try {
+            await contentService.seedDemo()
+            setSeedSuccess('展示專案數據已成功預置！')
+            setTimeout(() => {
+                window.location.reload()
+            }, 1500)
+        } catch (err: any) {
+            setError(err.response?.data?.detail || err.message || '預置數據失敗')
+        } finally {
+            setSeeding(false)
+        }
+    }
+
     // Fetch current settings
     useEffect(() => {
         if (isAuthenticated) {
@@ -127,43 +153,6 @@ function Settings() {
         }
     }
 
-    const handleSave = async () => {
-        if (!isAuthenticated) {
-            setError('請先登入才能儲存設定')
-            return
-        }
-
-        setSaving(true)
-        setError(null)
-        setSuccess(null)
-
-        try {
-            await api.put('/settings', {
-                google_api_key: googleApiKey || undefined,
-                google_cx_id: googleCxId || undefined,
-                ai_provider: aiProvider,
-                ai_model: aiModel,
-                ai_api_key: aiApiKey || undefined,
-                google_client_id: googleClientId || undefined,
-                google_client_secret: googleClientSecret || undefined,
-            })
-
-            // Clear form fields
-            setGoogleApiKey('')
-            setGoogleCxId('')
-            setAiApiKey('')
-            setGoogleClientId('')
-            setGoogleClientSecret('')
-
-            // Refresh settings
-            await fetchSettings()
-            setSuccess('設定已儲存成功！')
-        } catch (err: any) {
-            setError(err.response?.data?.detail || '儲存失敗')
-        } finally {
-            setSaving(false)
-        }
-    }
 
     const handleSaveGoogle = async () => {
         if (!isAuthenticated) {
@@ -644,6 +633,46 @@ function Settings() {
                                 <Save className="w-4 h-4" />
                             )}
                             儲存
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Demo Data Seeding */}
+            <div className="card border border-amber-200 dark:border-amber-900/30 bg-amber-50/5 dark:bg-amber-950/5">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
+                        <Database className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div>
+                        <h2 className="font-semibold text-gray-900 dark:text-gray-100">演示展示數據 (Demo Seeding)</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">一鍵預置「新站模式」與「舊站模式」專案，供功能展示使用</p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                        點擊下方按鈕後，系統將一鍵清空現有專案資料庫，並自動預置完整的演示資料。包含網站定位、主題地圖節點、已被核准的 Brief，以及已撰寫完成並通過 AI 品質審查的草稿等。
+                    </p>
+                    
+                    {seedSuccess && (
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-lg text-emerald-700 dark:text-emerald-400 text-sm">
+                            {seedSuccess} 系統將在 1.5 秒後自動重新載入...
+                        </div>
+                    )}
+
+                    <div className="flex justify-start">
+                        <button
+                            onClick={handleSeedDemo}
+                            disabled={seeding}
+                            className="btn bg-amber-600 hover:bg-amber-700 text-white flex items-center gap-2 text-sm py-2.5 px-4 disabled:opacity-50 font-medium rounded-lg shadow-sm hover:shadow transition-all duration-200"
+                        >
+                            {seeding ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Database className="w-4 h-4" />
+                            )}
+                            一鍵預置展示數據
                         </button>
                     </div>
                 </div>
