@@ -37,7 +37,7 @@
 ### 🧪 驗證與編譯
 - 新增 `tests/test_versioning.py` 測試版本保存與還原。
 - 修正 `tests/test_content_queue.py` 資料庫 schema 屬性不一致問題，以及 `test_list_draft_versions` 對回傳欄位的檢查斷言。
-- 修正前端 `ContentQueue.tsx` 未使用的 React/ArrowRight 導入與錯誤的 LayoutKanban 圖標。
+- 修正前端 `ContentQueue.tsx` 未使用的 React/ArrowRight 導入與錯誤的 LayoutKanban 圖標，並對其進行 UI/UX 視覺重構，支援深色模式與主專案設計風格（如 `primary` 色系、`.card` 樣式等）完全一致。
 - 執行後端 pytest，全數 **27 Passed** 成功通過。
 - 前端 `npm run build` 生產環境編譯成功，無任何 TypeScript 類型錯誤。
 
