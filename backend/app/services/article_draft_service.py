@@ -6,7 +6,7 @@ Manages article draft CRUD operations for Strategy Wizard.
 
 import uuid
 from typing import Optional, List, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc
@@ -320,7 +320,7 @@ class ArticleDraftService:
         
         # Increment main draft's version
         draft.version += 1
-        draft.updated_at = datetime.utcnow()
+        draft.updated_at = datetime.now(timezone.utc)
         
         await db.commit()
         await db.refresh(backup)
@@ -379,7 +379,7 @@ class ArticleDraftService:
         draft.qa_status = target.qa_status
         draft.qa_results = target.qa_results
         
-        draft.updated_at = datetime.utcnow()
+        draft.updated_at = datetime.now(timezone.utc)
         await db.commit()
         await db.refresh(draft)
         return draft

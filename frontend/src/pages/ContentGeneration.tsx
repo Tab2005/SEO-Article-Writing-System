@@ -246,6 +246,11 @@ function ContentGeneration() {
 
     // Step 2: Generate content from edited outline
     const handleGenerateContent = async () => {
+        if (!selectedBriefId) {
+            alert('請先選擇已核准的文章任務書。')
+            return
+        }
+
         setWorkflowStep('generating-content')
         setError(null)
         setCreatedDraftId(null)
@@ -274,7 +279,7 @@ function ContentGeneration() {
                 word_count_target: wordCount,
                 tone,
                 market,
-                brief_id: selectedBriefId || undefined,
+                brief_id: selectedBriefId,
                 outline: outlineObj
             })
             setResult(data)

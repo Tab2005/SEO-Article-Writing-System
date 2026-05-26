@@ -9,7 +9,7 @@ export interface OutlineRequest {
     tone?: string
     use_competitor_analysis?: boolean
     market?: string
-    brief_id?: string
+    brief_id: string
 }
 
 export interface ContentRequest {
@@ -19,7 +19,7 @@ export interface ContentRequest {
     word_count_target?: number
     tone?: string
     market?: string
-    brief_id?: string
+    brief_id: string
     outline?: ArticleOutline
 }
 

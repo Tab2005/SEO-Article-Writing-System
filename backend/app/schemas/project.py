@@ -49,8 +49,7 @@ class ProjectResponse(ProjectBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ProjectWithArticles(ProjectResponse):
@@ -68,8 +67,7 @@ class ArticleBrief(BaseModel):
     word_count: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # Update forward references

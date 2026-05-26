@@ -48,11 +48,12 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 100
     rate_limit_period_hours: int = 1
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        extra = "ignore"
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+        "extra": "ignore"
+    }
 
 
 @lru_cache()

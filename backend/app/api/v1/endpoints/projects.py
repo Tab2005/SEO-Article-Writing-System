@@ -23,6 +23,7 @@ from app.models.article import Article, ArticleStatus
 from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse
 from app.schemas.content_queue import ContentQueueItemResponse
 from app.services.seed_service import seed_service
+from app.services.site_profile_service import site_profile_service
 
 
 router = APIRouter()
@@ -158,14 +159,22 @@ async def activate_project(
             status_code=400,
             detail="Cannot activate project: Site Profile has not been configured."
         )
-    if project.site_profile.status != "ready":
+    readiness_issues, status_changed = site_profile_service.sync_status(project.site_profile)
+    if status_changed:
+        await db.commit()
+        await db.refresh(project.site_profile)
+    if readiness_issues:
+        missing_fields = ", ".join(readiness_issues)
         raise HTTPException(
             status_code=400,
-            detail="Cannot activate project: Site Profile is incomplete (must have Site Name, Business Type, and Description)."
+            detail=(
+                "Cannot activate project: Site Profile is incomplete. "
+                f"Missing required fields: {missing_fields}."
+            ),
         )
 
     # 2. Topic Map check (must have at least 1 active topic node)
-    active_nodes = [node for node in project.topic_nodes if node.status != "archived"]
+    active_nodes = [node for node in project.topic_nodes if node.status == "active"]
     if not active_nodes:
         raise HTTPException(
             status_code=400,

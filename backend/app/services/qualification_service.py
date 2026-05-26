@@ -16,6 +16,7 @@ from app.models.content_item import ContentItem
 from app.models.topic_node import TopicNode
 from app.models.project import Project
 from app.services.llm_service import llm_service
+from app.services.site_profile_service import site_profile_service
 from app.core.exceptions import NotFoundException, BadRequestException
 
 
@@ -51,6 +52,8 @@ class QualificationService:
         project = project_res.scalars().first()
         if not project:
             raise NotFoundException("Project not found.")
+        if project.status != "active":
+            raise BadRequestException("Project must be active before evaluating topics.")
 
         profile_res = await db.execute(
             select(SiteProfile).where(SiteProfile.project_id == project_id)
@@ -58,12 +61,26 @@ class QualificationService:
         profile = profile_res.scalars().first()
         if not profile:
             raise BadRequestException("Site Profile must be setup before evaluating topics.")
+        readiness_issues, status_changed = site_profile_service.sync_status(profile)
+        if status_changed:
+            await db.commit()
+            await db.refresh(profile)
+        if readiness_issues:
+            missing_fields = ", ".join(readiness_issues)
+            raise BadRequestException(
+                f"Site Profile must be ready before evaluating topics. Missing required fields: {missing_fields}."
+            )
 
         # Fetch active topic nodes context
         nodes_res = await db.execute(
             select(TopicNode).where(TopicNode.project_id == project_id)
         )
         nodes = list(nodes_res.scalars().all())
+        active_nodes = [node for node in nodes if node.status == "active"]
+        if not active_nodes:
+            raise BadRequestException(
+                "Topic Map must contain at least one active Topic Node before evaluating topics."
+            )
 
         # Step 1: Hard Filter Checks (Restricted Angles)
         restricted = profile.restricted_angles or []
@@ -148,7 +165,7 @@ class QualificationService:
         
         topic_nodes_context = [
             {"name": n.name, "role": n.topic_role, "journey_stage": n.journey_stage}
-            for n in nodes if n.status != "archived"
+            for n in active_nodes
         ]
         
         # LLM evaluate
@@ -160,7 +177,7 @@ class QualificationService:
         
         # Auto-match to an existing topic node if one shares the name exactly
         mapped_node_id: Optional[uuid.UUID] = None
-        for n in nodes:
+        for n in active_nodes:
             if n.name.lower() in input_term.lower() or input_term.lower() in n.name.lower():
                 mapped_node_id = n.id
                 break

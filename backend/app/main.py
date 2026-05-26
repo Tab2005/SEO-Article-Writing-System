@@ -25,13 +25,13 @@ def create_application() -> FastAPI:
     # Mount API Routers
     application.include_router(api_v1_router, prefix=settings.api_v1_prefix)
     
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     @application.get("/health")
     async def health_check():
         return {
             "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
         }
         
     return application

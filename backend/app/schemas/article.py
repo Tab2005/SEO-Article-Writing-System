@@ -69,8 +69,7 @@ class ArticleResponse(ArticleBase):
     updated_at: datetime
     published_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ArticleVersionResponse(BaseModel):
@@ -81,8 +80,7 @@ class ArticleVersionResponse(BaseModel):
     word_count: int
     created_at: datetime
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 # ===== Outline Schemas =====

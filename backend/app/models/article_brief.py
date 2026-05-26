@@ -5,8 +5,11 @@ Defines the ArticleBrief entity representing the structured content planning bri
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, TYPE_CHECKING
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 from sqlalchemy import String, DateTime, Text, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -71,15 +74,15 @@ class ArticleBrief(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         server_default=func.now(),
-        onupdate=datetime.utcnow,
+        onupdate=utc_now,
         nullable=False,
     )
 

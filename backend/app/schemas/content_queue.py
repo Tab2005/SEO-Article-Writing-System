@@ -29,5 +29,4 @@ class ContentQueueItemResponse(BaseModel):
     brief_id: Optional[uuid.UUID] = None
     draft_id: Optional[uuid.UUID] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}

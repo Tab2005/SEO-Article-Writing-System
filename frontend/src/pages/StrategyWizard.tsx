@@ -5,9 +5,7 @@ import {
     Layers, Sparkles, Lightbulb, Plus, X, Copy, Download, Check
 } from 'lucide-react'
 import { researchService, AnalysisReport, ResearchJob } from '../services/research.service'
-import { contentService } from '../services/content.service'
 import { strategyService } from '../services/strategy.service'
-import { streamingService, StreamProgressEvent, StreamContentEvent, StreamDoneEvent } from '../services/draft.service'
 
 // Intent options
 const intentOptions = [
@@ -242,57 +240,31 @@ function StrategyWizard() {
         setSelectedTitle(tempSelectedTitle)
         setLoading(true)
 
-        try {
-            // Generate outline via API
-            const outlineResult = await contentService.generateOutline({
-                topic: tempSelectedTitle,
-                target_keyword: keyword,
-                secondary_keywords: selectedLsi,
-                tone: currentStyle,
-                market: market
-            })
+        const fallbackSections: EditableSection[] = [
+            { id: 'intro', heading: `導言：為什麼「${keyword}」是您今年必須掌握的關鍵？`, level: 2, key_points: ['趨勢背景', '核心價值與目標'], lsi: [] }
+        ]
 
-            // Convert to editable format
-            const editableSections: EditableSection[] = outlineResult.sections.map((section, idx) => ({
-                id: `section-${idx}`,
-                heading: section.heading,
-                level: section.level,
-                key_points: section.key_points,
-                lsi: selectedLsi.filter((_, i) => i === idx % selectedLsi.length ? true : false)
-            }))
-
-            setOutline(editableSections)
-            setLoading(false)
-            setStep(3)
-        } catch (error) {
-            console.error('Failed to generate outline:', error)
-            // Fallback: generate outline locally
-            const fallbackSections: EditableSection[] = [
-                { id: 'intro', heading: `導言：為什麼「${keyword}」是您今年必須掌握的關鍵？`, level: 2, key_points: ['趨勢背景', '核心價值與目標'], lsi: [] }
-            ]
-
-            selectedLsi.forEach((lsi, index) => {
-                fallbackSections.push({
-                    id: `h2-${index}`,
-                    heading: `深度解析：${lsi} 如何決定您的${keyword}成效`,
-                    level: 2,
-                    key_points: [`${lsi} 的運作機制`, '針對新手的實踐技巧', '常見優化建議'],
-                    lsi: [lsi]
-                })
-            })
-
+        selectedLsi.forEach((lsi, index) => {
             fallbackSections.push({
-                id: 'conclusion',
-                heading: '結語與常見問題：邁向成功的最後建議',
+                id: `h2-${index}`,
+                heading: `深度解析：${lsi} 如何決定您的${keyword}成效`,
                 level: 2,
-                key_points: ['FAQ 疑難排解', '後續行動清單'],
-                lsi: []
+                key_points: [`${lsi} 的運作機制`, '針對新手的實踐技巧', '常見優化建議'],
+                lsi: [lsi]
             })
+        })
 
-            setOutline(fallbackSections)
-            setLoading(false)
-            setStep(3)
-        }
+        fallbackSections.push({
+            id: 'conclusion',
+            heading: '結語與常見問題：邁向成功的最後建議',
+            level: 2,
+            key_points: ['FAQ 疑難排解', '後續行動清單'],
+            lsi: []
+        })
+
+        setOutline(fallbackSections)
+        setLoading(false)
+        setStep(3)
     }
 
     const updateSectionHeading = (index: number, heading: string) => {
@@ -340,6 +312,25 @@ function StrategyWizard() {
     const [currentSection, setCurrentSection] = useState('')
     const [isStreaming, setIsStreaming] = useState(false)
 
+    const buildPreviewArticle = () => {
+        const body = outline.map(section => {
+            const points = section.key_points
+                .map(point => `- ${point}`)
+                .join('\n')
+            return `## ${section.heading}\n\n${points}\n\n請在正式流程中，依據 approved brief 補上案例、數據與品牌觀點。`
+        }).join('\n\n')
+
+        return [
+            `# ${selectedTitle}`,
+            '',
+            '> 此頁面現在只提供本地策略預覽。正式文章生成請改走 Qualification -> Brief -> Content。',
+            '',
+            `${keyword} 是本文的核心主題。以下內容用於預覽段落結構，協助您在進入正式 brief-first 流程前先確認方向。`,
+            '',
+            body,
+        ].join('\n')
+    }
+
     const handleStartWriting = async () => {
         setStep(4)
         setWritingProgress(0)
@@ -347,90 +338,35 @@ function StrategyWizard() {
         setCurrentSection('')
         setIsStreaming(true)
 
-        // Build outline data for streaming API
-        const outlineData = {
-            sections: outline.map(section => ({
-                heading: section.heading,
-                level: section.level,
-                key_points: section.key_points,
-            })),
-            meta_description: `${keyword} 完整指南`,
-            estimated_word_count: outline.length * 450,
-        }
+        const steps = outline.length > 0 ? outline : [{
+            id: 'preview',
+            heading: '建立策略預覽',
+            level: 2,
+            key_points: [],
+            lsi: [],
+        }]
 
-        const streamRequest = {
-            title: selectedTitle,
-            target_keyword: keyword,
-            outline: outlineData,
-            secondary_keywords: selectedLsi,
-            tone: currentStyle,
-        }
+        let index = 0
+        const interval = window.setInterval(() => {
+            const activeSection = steps[Math.min(index, steps.length - 1)]
+            setCurrentSection(activeSection.heading)
 
-        const { startStreaming } = streamingService.createEventSource(streamRequest)
-
-        try {
-            await startStreaming(
-                // onProgress
-                (event: StreamProgressEvent) => {
-                    setCurrentSection(event.section)
-                    setWritingProgress(event.progress)
-                },
-                // onContent
-                (event: StreamContentEvent) => {
-                    setArticleContent(prev => prev + event.content)
-                },
-                // onDone
-                (event: StreamDoneEvent) => {
-                    setWritingProgress(100)
-                    setArticleContent(event.content)
-                    setIsStreaming(false)
-                    setCurrentSection('')
-                },
-                // onError
-                (error: Error) => {
-                    console.error('Streaming error:', error)
-                    setIsStreaming(false)
-                    // Fallback to non-streaming generation
-                    handleFallbackGeneration()
-                }
+            const nextProgress = Math.min(
+                Math.round(((index + 1) / steps.length) * 100),
+                100
             )
-        } catch (error) {
-            console.error('Failed to start streaming:', error)
-            handleFallbackGeneration()
-        }
-    }
+            setWritingProgress(nextProgress)
 
-    // Fallback to regular content generation if streaming fails
-    const handleFallbackGeneration = async () => {
-        setWritingProgress(10)
+            if (index >= steps.length - 1) {
+                window.clearInterval(interval)
+                setArticleContent(buildPreviewArticle())
+                setIsStreaming(false)
+                setCurrentSection('')
+                return
+            }
 
-        // Simulate progress
-        let progress = 10
-        const interval = setInterval(() => {
-            progress += 5
-            setWritingProgress(Math.min(progress, 90))
-            if (progress >= 90) clearInterval(interval)
-        }, 500)
-
-        try {
-            const result = await contentService.generateContent({
-                topic: selectedTitle,
-                target_keyword: keyword,
-                secondary_keywords: selectedLsi,
-                word_count_target: outline.length * 450,
-                tone: currentStyle,
-                market: market
-            })
-
-            clearInterval(interval)
-            setWritingProgress(100)
-            setArticleContent(result.content)
-        } catch (error) {
-            console.error('Fallback generation failed:', error)
-            clearInterval(interval)
-            setWritingProgress(100)
-            setArticleContent(`# ${selectedTitle}\n\n生成失敗，請重試。`)
-        }
+            index += 1
+        }, 250)
     }
 
     const copyToClipboard = async () => {

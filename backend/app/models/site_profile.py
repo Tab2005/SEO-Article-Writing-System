@@ -5,8 +5,11 @@ Defines the SiteProfile entity for storing website identity and positioning rule
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 from sqlalchemy import String, DateTime, Text, ForeignKey, func, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -60,15 +63,15 @@ class SiteProfile(Base):
     
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         server_default=func.now(),
         nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=datetime.utcnow,
+        default=utc_now,
         server_default=func.now(),
-        onupdate=datetime.utcnow,
+        onupdate=utc_now,
         nullable=False,
     )
     

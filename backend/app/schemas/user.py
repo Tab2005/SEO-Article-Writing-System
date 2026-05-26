@@ -57,8 +57,7 @@ class UserResponse(UserBase):
     articles_count: int = 0
     researches_count: int = 0
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class UserInDB(UserResponse):
